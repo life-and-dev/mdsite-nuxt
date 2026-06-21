@@ -17,6 +17,7 @@ node_modules/
 
 # Renderer runtime/generated files
 .mdsite-compat.yml
+/content.config.yml
 docs/_menu.yml
 docs/favicon/
 public/site.webmanifest

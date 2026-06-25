@@ -28,7 +28,7 @@ export function prepareRendererRuntime(rootDir: string, options: {
   }
 
   if (!configPath) {
-    console.error('❌ No _mdsite.yml configuration found. Set MDSITE_CONFIG_PATH or pass a _mdsite.yml path.')
+    console.error('❌ No mdsite.yml configuration found. Set MDSITE_CONFIG_PATH or pass a mdsite.yml path.')
     process.exit(1)
   }
 

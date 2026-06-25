@@ -3,6 +3,9 @@ import path from 'path';
 import YAML from 'yaml';
 
 export interface MdsiteConfig {
+  content?: {
+    path?: string
+  }
   favicon: string
   features: {
     bibleTooltips: boolean
@@ -34,7 +37,7 @@ export interface LoadedMdsiteConfig {
   contentDir: string
 }
 
-const configFileName = '_mdsite.yml';
+const configFileName = 'mdsite.yml';
 
 const defaultLightColors = {
   primary: '#0969da',
@@ -98,9 +101,9 @@ export function loadMdsiteConfigSync(options: {
   searchFrom?: string
 } = {}): LoadedMdsiteConfig {
   const configPath = resolveMdsiteConfigPath(options);
-  const contentDir = resolveContentDir(options, configPath);
 
   if (!configPath) {
+    const contentDir = resolveContentDir(options, configPath);
     return {
       config: createDefaultMdsiteConfig(path.basename(contentDir) || 'Site'),
       contentDir
@@ -109,6 +112,7 @@ export function loadMdsiteConfigSync(options: {
 
   const rawText = fs.readFileSync(configPath, 'utf8');
   const parsed = YAML.parse(rawText) ?? {};
+  const contentDir = resolveContentDir(options, configPath, parsed);
 
   return {
     config: normalizeMdsiteConfig(parsed, contentDir),
@@ -149,7 +153,7 @@ export function resolveContentDir(options: {
   configPath?: string
   contentPath?: string
   searchFrom?: string
-} = {}, resolvedConfigPath?: string): string {
+} = {}, resolvedConfigPath?: string, rawConfig: Record<string, any> = {}): string {
   if (options.contentPath) {
     return path.resolve(options.contentPath);
   }
@@ -159,7 +163,8 @@ export function resolveContentDir(options: {
   }
 
   if (resolvedConfigPath) {
-    return path.dirname(resolvedConfigPath);
+    const configDir = path.dirname(resolvedConfigPath);
+    return typeof rawConfig.content?.path === 'string' ? path.resolve(configDir, rawConfig.content.path) : configDir;
   }
 
   if (options.searchFrom) {
@@ -206,6 +211,7 @@ function normalizeMdsiteConfig(rawConfig: Record<string, any>, contentDir: strin
       bibleTooltips: rawConfig.features?.bibleTooltips ?? fallbackConfig.features.bibleTooltips,
       sourceEdit: rawConfig.features?.sourceEdit ?? fallbackConfig.features.sourceEdit
     },
+    content: typeof rawConfig.content?.path === 'string' ? { path: rawConfig.content.path } : fallbackConfig.content,
     menu: Array.isArray(rawConfig.menu) ? rawConfig.menu : fallbackConfig.menu,
     server: {
       output: typeof rawConfig.server?.output === 'string' ? rawConfig.server.output : fallbackConfig.server.output,

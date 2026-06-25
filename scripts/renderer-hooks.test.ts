@@ -88,10 +88,10 @@ describe('renderer hooks orchestration', () => {
     vi.clearAllMocks()
     process.env = { ...originalEnv }
 
-    resolveMdsiteConfigPathMock.mockReturnValue('/renderer/_mdsite.yml')
+    resolveMdsiteConfigPathMock.mockReturnValue('/renderer/mdsite.yml')
     loadMdsiteConfigSyncMock.mockReturnValue({
       config: { site: { name: 'Docs' } },
-      configPath: '/renderer/_mdsite.yml',
+      configPath: '/renderer/mdsite.yml',
       contentDir: '/renderer/docs',
     })
     existsSyncMock.mockImplementation((target: string) => target === '/renderer/docs')
@@ -108,27 +108,27 @@ describe('renderer hooks orchestration', () => {
 
   it('prepares runtime from the resolved mdsite config and exports stable env values', () => {
     const runtime = prepareRendererRuntime('/renderer', {
-      configPath: '/renderer/_mdsite.yml',
+      configPath: '/renderer/mdsite.yml',
       contentPath: '/input/docs',
     })
 
     expect(resolveMdsiteConfigPathMock).toHaveBeenCalledWith({
-      configPath: '/renderer/_mdsite.yml',
+      configPath: '/renderer/mdsite.yml',
       contentPath: '/input/docs',
     })
     expect(loadMdsiteConfigSyncMock).toHaveBeenCalledWith({
-      configPath: '/renderer/_mdsite.yml',
+      configPath: '/renderer/mdsite.yml',
       contentPath: '/input/docs',
     })
     expect(runtime).toEqual({
       config: { site: { name: 'Docs' } },
-      configPath: '/renderer/_mdsite.yml',
+      configPath: '/renderer/mdsite.yml',
       contentDir: '/renderer/docs',
       rootDir: '/renderer',
     })
     expect(process.env.NUXT_CONTENT_PATH).toBe('/renderer/docs')
     expect(process.env.CONTENT_DIR).toBe('/renderer/docs')
-    expect(process.env.MDSITE_CONFIG_PATH).toBe('/renderer/_mdsite.yml')
+    expect(process.env.MDSITE_CONFIG_PATH).toBe('/renderer/mdsite.yml')
   })
 
   it('falls back to the legacy compatibility config when no explicit mdsite config resolves', () => {
@@ -171,7 +171,7 @@ describe('renderer hooks orchestration', () => {
     existsSyncMock.mockReturnValue(false)
 
     expect(() => prepareRendererRuntime('/renderer')).toThrow('process.exit(1)')
-    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('No _mdsite.yml configuration found'))
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('No mdsite.yml configuration found'))
 
     consoleErrorSpy.mockRestore()
     processExitSpy.mockRestore()
@@ -216,7 +216,7 @@ describe('renderer hooks orchestration', () => {
   })
 
   it('runs non-dev setup hooks in orchestration order and publishes favicon assets on success', async () => {
-    await runSetupHooks('generate', '/renderer', { configPath: '/renderer/_mdsite.yml' })
+    await runSetupHooks('generate', '/renderer', { configPath: '/renderer/mdsite.yml' })
 
     expect(syncContentMock).toHaveBeenCalledTimes(1)
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
@@ -229,7 +229,7 @@ describe('renderer hooks orchestration', () => {
   })
 
   it('runs setup mode through the same non-dev orchestration path as build and generate', async () => {
-    await runSetupHooks('setup', '/renderer', { configPath: '/renderer/_mdsite.yml' })
+    await runSetupHooks('setup', '/renderer', { configPath: '/renderer/mdsite.yml' })
 
     expect(syncContentMock).toHaveBeenCalledTimes(1)
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
@@ -242,7 +242,7 @@ describe('renderer hooks orchestration', () => {
   })
 
   it('marks orchestration complete for build mode on the same shared non-dev path', async () => {
-    await runSetupHooks('build', '/renderer', { configPath: '/renderer/_mdsite.yml' })
+    await runSetupHooks('build', '/renderer', { configPath: '/renderer/mdsite.yml' })
 
     expect(syncContentMock).toHaveBeenCalledTimes(1)
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
@@ -265,7 +265,7 @@ describe('renderer hooks orchestration', () => {
   it('keeps non-dev orchestration error-safe when favicon generation reports no output', async () => {
     generateFaviconsMock.mockResolvedValue(false)
 
-    await runSetupHooks('generate', '/renderer', { configPath: '/renderer/_mdsite.yml' })
+    await runSetupHooks('generate', '/renderer', { configPath: '/renderer/mdsite.yml' })
 
     expect(syncContentMock).toHaveBeenCalledTimes(1)
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)

@@ -48,6 +48,8 @@ export default defineNuxtConfig({
 
   vite: {
     build: {
+      // Disable esbuild CSS minify because it drops semicolons from nested Vuetify @layer rules, causing noisy warnings.
+      cssMinify: false,
       rollupOptions: {
         external: ['fs/promises', 'path']
       }

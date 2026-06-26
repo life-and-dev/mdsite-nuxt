@@ -8,7 +8,7 @@ features:
   bibleTooltips: true
   sourceEdit: false
 site:
-  canonical: 'https://life-and-dev.github.io/md-site'
+  canonical: 'https://life-and-dev.github.io/mdsite/'
   name: 'Example Site'
 themes:
   light:

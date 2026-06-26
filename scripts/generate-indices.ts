@@ -31,6 +31,7 @@ function getSourceDir(): string {
  * Get target public directory
  */
 function getTargetDir(): string {
+    if (process.env.MDSITE_PUBLIC_DIR) return process.env.MDSITE_PUBLIC_DIR
     return path.resolve(__dirname, '..', 'public')
 }
 
@@ -325,6 +326,29 @@ function countNodes(nodes: MinimalTreeNode[]): number {
     return count
 }
 
+async function buildFallbackNavigationTree(sourceDir: string): Promise<MinimalTreeNode[]> {
+    const markdownFiles = await getAllMarkdownFiles(sourceDir)
+    const nodes: MinimalTreeNode[] = []
+
+    for (const [order, filePath] of markdownFiles.sort().entries()) {
+        const content = await fs.readFile(filePath, 'utf-8')
+        const metadata = extractMarkdownMetadata(content)
+        const urlPath = filePathToUrlPath(filePath, sourceDir)
+        const title = metadata.title ?? path.basename(filePath, '.md')
+
+        nodes.push({
+            id: `${urlPath.split('/').filter(Boolean).pop() || 'home'}-${order}`,
+            title,
+            path: urlPath,
+            type: 'link',
+            description: metadata.description,
+            isPrimary: true
+        })
+    }
+
+    return nodes
+}
+
 /**
  * Generate navigation JSON file
  */
@@ -343,14 +367,20 @@ export async function generateNavigationJson() {
     try {
         if (await fs.pathExists(menuPath)) {
             const menuContent = await fs.readFile(menuPath, 'utf-8')
-            const menuItems = parseYaml(menuContent) as MenuItemType[]
-            const result = await processMenuItems(menuItems, '/')
-            tree = result.nodes
+            const menuItems = parseYaml(menuContent) as MenuItemType[] | null
+            if (Array.isArray(menuItems) && menuItems.length > 0) {
+                const result = await processMenuItems(menuItems, '/')
+                tree = result.nodes
+            }
         } else {
             console.warn('⚠️ No _menu.yml or _menu.yaml found at:', menuPath)
         }
     } catch (error) {
         console.error('Error building navigation tree:', error)
+    }
+
+    if (tree.length === 0) {
+        tree = await buildFallbackNavigationTree(sourceDir)
     }
 
     const targetDir = getTargetDir()

@@ -8,7 +8,7 @@
     <v-container class="d-flex justify-center align-center">
       <div class="footer-links">
         <v-btn
-          :to="aboutLink"
+          :href="aboutLink"
           variant="text"
           color="on-surface-appbar"
           class="footer-link"
@@ -19,7 +19,7 @@
         <v-divider vertical class="mx-2" />
 
         <v-btn
-          :to="disclaimerLink"
+          :href="disclaimerLink"
           variant="text"
           color="on-surface-appbar"
           class="footer-link"
@@ -47,12 +47,14 @@
 
 <script setup lang="ts">
 import { useSourceEdit } from '~/composables/useSourceEdit';
+import { withBasePath } from '../../utils/base-url'
 
+const appBaseURL = useRuntimeConfig().app.baseURL
 const { getEditUrl } = useSourceEdit()
 
 // Generate links to root content files
-const aboutLink = computed(() => '/about')
-const disclaimerLink = computed(() => '/disclaimer')
+const aboutLink = computed(() => withBasePath('/about', appBaseURL))
+const disclaimerLink = computed(() => withBasePath('/disclaimer', appBaseURL))
 const editUrl = computed(() => getEditUrl())
 </script>
 

@@ -1,10 +1,12 @@
 import type { SearchIndexEntry } from '../../scripts/generate-indices'
+import { withBasePath } from '../../utils/base-url'
 
 /**
  * Fetch and cache search index from pre-built JSON file
  * Uses useState to prevent duplicate fetches across component instances
  */
 export function useSearchIndex() {
+  const appBaseURL = useRuntimeConfig().app.baseURL
   // Cache search index using useState (shared across all components)
   const searchIndex = useState<SearchIndexEntry[] | null>('search-index', () => null)
   const isLoading = useState<boolean>('search-index-loading', () => false)
@@ -27,7 +29,7 @@ export function useSearchIndex() {
     isLoading.value = true
 
     try {
-      const index = await $fetch<SearchIndexEntry[]>('/_search-index.json')
+      const index = await $fetch<SearchIndexEntry[]>(withBasePath('/_search-index.json', appBaseURL))
       searchIndex.value = index
       return index
     } catch (error) {

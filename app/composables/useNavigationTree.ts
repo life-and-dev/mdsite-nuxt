@@ -1,4 +1,5 @@
 import type { MinimalTreeNode } from '../../scripts/generate-indices'
+import { withBasePath } from '../../utils/base-url'
 
 export interface TreeNode {
   id: string
@@ -30,6 +31,7 @@ function getCacheKey(): string {
  * Build hierarchical navigation tree from @nuxt/content collection
  */
 export function useNavigationTree() {
+  const appBaseURL = useRuntimeConfig().app.baseURL
   // Use useState for server-side rendering and client hydration
   // Cache key changes hourly to pick up menu structure changes
   const tree = useState<TreeNode | null>(getCacheKey(), () => null)
@@ -50,7 +52,7 @@ export function useNavigationTree() {
     isLoading.value = true
     try {
       // Fetch pre-built navigation JSON
-      const minimalNodes = await $fetch<MinimalTreeNode[]>('/_navigation.json')
+      const minimalNodes = await $fetch<MinimalTreeNode[]>(withBasePath('/_navigation.json', appBaseURL))
 
       // Convert to TreeNode format with parent references
       tree.value = buildTreeFromMinimalNodes(minimalNodes)

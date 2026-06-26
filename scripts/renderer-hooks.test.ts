@@ -161,6 +161,40 @@ describe('renderer hooks orchestration', () => {
     expect(process.env.NUXT_CONTENT_PATH).toBe(path.join('/renderer', 'legacy-docs'))
   })
 
+  it('supports the checked-in legacy renderer config keys', () => {
+    resolveMdsiteConfigPathMock.mockReturnValue(undefined)
+    existsSyncMock.mockImplementation((target: string) => (
+      target === '/renderer/content.config.yml' || target === '/content/docs'
+    ))
+    parseYamlMock.mockReturnValue({
+      contentPath: '/content/docs',
+      contentGitRepo: 'https://example.test/docs.git',
+      siteCanonical: 'https://example.test',
+      siteName: 'Legacy Site',
+    })
+    loadMdsiteConfigSyncMock.mockReturnValue({
+      config: { site: { name: 'Legacy Site' } },
+      configPath: '/renderer/.mdsite-compat.yml',
+      contentDir: '/content/docs',
+    })
+
+    prepareRendererRuntime('/renderer')
+
+    expect(stringifyYamlMock).toHaveBeenCalledWith(expect.objectContaining({
+      server: expect.objectContaining({
+        repo: 'https://example.test/docs.git',
+      }),
+      site: expect.objectContaining({
+        canonical: 'https://example.test',
+        name: 'Legacy Site',
+      }),
+    }))
+    expect(loadMdsiteConfigSyncMock).toHaveBeenCalledWith({
+      configPath: '/renderer/.mdsite-compat.yml',
+      contentPath: '/content/docs',
+    })
+  })
+
   it('exits when no renderer config can be resolved', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: number) => {

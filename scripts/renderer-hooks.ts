@@ -109,7 +109,8 @@ function ensureLegacyCompatibilityConfig(rootDir: string): string | undefined {
   }
 
   const legacyConfig = YAML.parse(fs.readFileSync(legacyConfigPath, 'utf8')) ?? {}
-  const contentDir = path.resolve(rootDir, legacyConfig.content?.path || legacyConfig.content?.git?.path || 'docs')
+  const legacyContentPath = legacyConfig.content?.path || legacyConfig.content?.git?.path || legacyConfig.contentPath || 'docs'
+  const contentDir = path.resolve(rootDir, legacyContentPath)
   const compatibilityConfigPath = path.join(rootDir, '.mdsite-compat.yml')
   const compatibilityConfig = {
     favicon: '',
@@ -121,11 +122,11 @@ function ensureLegacyCompatibilityConfig(rootDir: string): string | undefined {
     server: {
       output: '.output',
       path: '.mdsite',
-      repo: legacyConfig.content?.git?.repo || ''
+      repo: legacyConfig.content?.git?.repo || legacyConfig.contentGitRepo || ''
     },
     site: {
-      canonical: legacyConfig.site?.canonical || '',
-      name: legacyConfig.site?.name || path.basename(contentDir) || 'Site'
+      canonical: legacyConfig.site?.canonical || legacyConfig.siteCanonical || '',
+      name: legacyConfig.site?.name || legacyConfig.siteName || path.basename(contentDir) || 'Site'
     },
     themes: legacyConfig.themes || {}
   }

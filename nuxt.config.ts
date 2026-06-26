@@ -3,10 +3,12 @@ import path from 'path'
 import { getDomainThemes } from './app/config/themes'
 import { createBibleReferencePatterns } from './app/utils/bible-book-names'
 import { runBuildFallbackHooks } from './scripts/renderer-hooks'
+import { withBasePath } from './utils/base-url'
 import { loadMdsiteConfigSync } from './utils/mdsite-config'
 
 const mdsite = loadMdsiteConfigSync()
 const siteConfig = mdsite.config
+const appBaseURL = process.env.NUXT_APP_BASE_URL || '/'
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -53,12 +55,13 @@ export default defineNuxtConfig({
   },
 
   app: {
+    baseURL: appBaseURL,
     head: {
       link: [
-        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg', sizes: 'any' },
-        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico', sizes: '32x32' },
-        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
-        { rel: 'manifest', href: '/site.webmanifest' },
+        { rel: 'icon', type: 'image/svg+xml', href: withBasePath('/favicon.svg', appBaseURL), sizes: 'any' },
+        { rel: 'icon', type: 'image/x-icon', href: withBasePath('/favicon.ico', appBaseURL), sizes: '32x32' },
+        { rel: 'apple-touch-icon', href: withBasePath('/apple-touch-icon.png', appBaseURL) },
+        { rel: 'manifest', href: withBasePath('/site.webmanifest', appBaseURL) },
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css' },
         { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap' }
       ]

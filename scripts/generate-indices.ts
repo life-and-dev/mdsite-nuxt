@@ -368,6 +368,84 @@ async function buildFallbackNavigationTree(sourceDir: string): Promise<MinimalTr
 }
 
 /**
+ * Load the menu array from a candidate config file (legacy _menu.yml/yaml or mdsite.yml).
+ * Returns null if the file is missing, unreadable, has no menu key, or has an empty menu.
+ */
+async function tryReadMenuFromConfig(configPath: string): Promise<MenuItemType[] | null> {
+    if (!await fs.pathExists(configPath)) {
+        return null
+    }
+
+    try {
+        const content = await fs.readFile(configPath, 'utf-8')
+        const parsed = parseYaml(content) as { menu?: MenuItemType[] } | null
+        if (parsed && Array.isArray(parsed.menu) && parsed.menu.length > 0) {
+            return parsed.menu
+        }
+    } catch (e) {
+        // Ignore parse errors - they shouldn't abort the whole lookup chain
+    }
+
+    return null
+}
+
+/**
+ * Try to read menu items from a plain (non-wrapped) legacy _menu.yml/yaml file.
+ * Returns null if the file is missing, unreadable, or doesn't contain a non-empty array.
+ */
+async function tryReadLegacyMenuFile(menuPath: string): Promise<MenuItemType[] | null> {
+    if (!await fs.pathExists(menuPath)) {
+        return null
+    }
+
+    try {
+        const content = await fs.readFile(menuPath, 'utf-8')
+        const parsed = parseYaml(content) as MenuItemType[] | null
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed
+        }
+    } catch (e) {
+        // Ignore parse errors
+    }
+
+    return null
+}
+
+/**
+ * Layered menu lookup. Tries, in order:
+ *   1. <sourceDir>/_menu.yml
+ *   2. <sourceDir>/_menu.yaml
+ *   3. MDSITE_CONFIG_PATH env var (parsed as wrapped { menu: [...] })
+ *   4. <sourceDir>/../mdsite.yml
+ *   5. <sourceDir>/mdsite.yml
+ * Returns the first non-empty menu array, or null if none resolve to a menu.
+ */
+async function loadMenuConfig(sourceDir: string): Promise<MenuItemType[] | null> {
+    const candidates: { path: string, isLegacy: boolean }[] = [
+        { path: path.join(sourceDir, '_menu.yml'), isLegacy: true },
+        { path: path.join(sourceDir, '_menu.yaml'), isLegacy: true }
+    ]
+
+    if (process.env.MDSITE_CONFIG_PATH) {
+        candidates.push({ path: process.env.MDSITE_CONFIG_PATH, isLegacy: false })
+    }
+
+    candidates.push({ path: path.join(sourceDir, '..', 'mdsite.yml'), isLegacy: false })
+    candidates.push({ path: path.join(sourceDir, 'mdsite.yml'), isLegacy: false })
+
+    for (const candidate of candidates) {
+        const menu = candidate.isLegacy
+            ? await tryReadLegacyMenuFile(candidate.path)
+            : await tryReadMenuFromConfig(candidate.path)
+        if (menu) {
+            return menu
+        }
+    }
+
+    return null
+}
+
+/**
  * Generate navigation JSON file
  */
 export async function generateNavigationJson() {
@@ -375,23 +453,14 @@ export async function generateNavigationJson() {
     console.log(`📋 Building navigation tree for: ${domain}`)
 
     const sourceDir = getSourceDir()
-    let menuPath = path.join(sourceDir, '_menu.yml')
-
-    if (!await fs.pathExists(menuPath)) {
-        menuPath = path.join(sourceDir, '_menu.yaml')
-    }
-
     let tree: MinimalTreeNode[] = []
     try {
-        if (await fs.pathExists(menuPath)) {
-            const menuContent = await fs.readFile(menuPath, 'utf-8')
-            const menuItems = parseYaml(menuContent) as MenuItemType[] | null
-            if (Array.isArray(menuItems) && menuItems.length > 0) {
-                const result = await processMenuItems(menuItems, '/')
-                tree = result.nodes
-            }
+        const menuItems = await loadMenuConfig(sourceDir)
+        if (menuItems) {
+            const result = await processMenuItems(menuItems, '/')
+            tree = result.nodes
         } else {
-            console.warn('⚠️ No _menu.yml or _menu.yaml found at:', menuPath)
+            console.warn('⚠️ No menu found in _menu.yml, _menu.yaml, MDSITE_CONFIG_PATH, or mdsite.yml (source: ' + sourceDir + ')')
         }
     } catch (error) {
         console.error('Error building navigation tree:', error)

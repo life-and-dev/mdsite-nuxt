@@ -18,7 +18,6 @@ const STATIC_FILES = [
     'site.webmanifest',
     'robots.txt'
 ]
-const MENU_FILES = ['_menu.yml', '_menu.yaml']
 const LOGO_FILE = 'logo.svg'
 const FAVICON_DIR = 'favicon'
 const FAVICON_FILES = [
@@ -119,13 +118,13 @@ export async function generateJsonFiles() {
 }
 
 /**
- * Copy all images, menus, and favicons from content to public directory (one-time)
+ * Copy all images and favicons from content to public directory (one-time)
  */
 export async function copyAllImages() {
     const sourceDir = getSourceDir()
     const targetDir = getTargetDir()
 
-    console.log(`📦 Copying images, menus, and favicons from: ${sourceDir}`)
+    console.log(`📦 Copying images and favicons from: ${sourceDir}`)
     console.log(`📦 Target directory: ${targetDir}`)
 
     let copiedCount = 0
@@ -142,15 +141,6 @@ export async function copyAllImages() {
             }
 
             await copyImage(sourcePath, false)
-            copiedCount++
-        }
-    }
-
-    // Copy root menu file (check all supported names)
-    for (const menuFile of MENU_FILES) {
-        const rootMenuPath = path.join(sourceDir, menuFile)
-        if (await fs.pathExists(rootMenuPath)) {
-            await copyMenuFile(rootMenuPath, false)
             copiedCount++
         }
     }
@@ -196,7 +186,7 @@ export async function cleanPublicDirectory() {
 }
 
 /**
- * Watch images, markdown files, and menu files in content directory
+ * Watch images and markdown files in content directory
  */
 export async function startWatcher() {
     const sourceDir = getSourceDir()
@@ -211,13 +201,12 @@ export async function startWatcher() {
     // Generate navigation and search JSON files
     await generateJsonFiles()
 
-    console.log(`👀 Watching images, markdown, and menus in: ${sourceDir}`)
+    console.log(`👀 Watching images and markdown in: ${sourceDir}`)
     console.log(`👀 Target directory: ${targetDir}\n`)
 
     const patterns = [
         ...IMAGE_EXTS.map(ext => `${sourceDir}/**/*.${ext}`),
-        `${sourceDir}/**/*.md`,           // Watch all markdown files
-        ...MENU_FILES.map(f => `${sourceDir}/${f}`) // Watch root menu files
+        `${sourceDir}/**/*.md`            // Watch all markdown files
     ]
 
     const watcher = chokidar.watch(patterns, {
@@ -232,10 +221,7 @@ export async function startWatcher() {
     watcher
         .on('add', (filePath) => {
             const fileName = path.basename(filePath)
-            if (MENU_FILES.includes(fileName)) {
-                copyMenuFile(filePath, true, 'added')
-                regenerateNavigation() // Menu change affects navigation
-            } else if (fileName === LOGO_FILE) {
+            if (fileName === LOGO_FILE) {
                 handleLogoChange(filePath, 'added')
             } else if (fileName.endsWith('.md')) {
                 // Markdown file added - regenerate both navigation and search
@@ -248,10 +234,7 @@ export async function startWatcher() {
         })
         .on('change', (filePath) => {
             const fileName = path.basename(filePath)
-            if (MENU_FILES.includes(fileName)) {
-                copyMenuFile(filePath, true, 'updated')
-                regenerateNavigation() // Menu change affects navigation
-            } else if (fileName === LOGO_FILE) {
+            if (fileName === LOGO_FILE) {
                 handleLogoChange(filePath, 'updated')
             } else if (fileName.endsWith('.md')) {
                 // Markdown file changed - regenerate both navigation and search
@@ -264,10 +247,7 @@ export async function startWatcher() {
         })
         .on('unlink', (filePath) => {
             const fileName = path.basename(filePath)
-            if (MENU_FILES.includes(fileName)) {
-                deleteMenuFile(filePath)
-                regenerateNavigation() // Menu deletion affects navigation
-            } else if (fileName === LOGO_FILE) {
+            if (fileName === LOGO_FILE) {
                 console.log(`🗑️ Logo removed: ${fileName}`)
             } else if (fileName.endsWith('.md')) {
                 // Markdown file deleted - regenerate both navigation and search
@@ -307,17 +287,11 @@ function getPublicPath(sourcePath: string): { relativePath: string, targetPath: 
 }
 
 /**
- * Copy a single file from content to public (images or menus)
+ * Copy a single image from content to public
  */
-async function copyFile(
-    sourcePath: string,
-    fileType: 'Image' | 'Menu',
-    log: boolean = true,
-    action: string = 'copied'
-) {
+async function copyImage(sourcePath: string, log: boolean = true, action: string = 'copied') {
     try {
-        // Check if this is a draft-only image (skip menus, they don't have draft checks)
-        if (fileType === 'Image' && await isDraftOnlyImage(sourcePath)) {
+        if (await isDraftOnlyImage(sourcePath)) {
             if (log) {
                 const fileName = path.basename(sourcePath)
                 console.log(`⊗ Skipped draft image: ${fileName}`)
@@ -331,7 +305,7 @@ async function copyFile(
         await fs.copy(sourcePath, targetPath)
 
         if (log) {
-            console.log(`✓ ${fileType} ${action}: ${relativePath}`)
+            console.log(`✓ Image ${action}: ${relativePath}`)
         }
     } catch (error) {
         console.error(`❌ Failed to copy ${sourcePath}:`, error)
@@ -339,12 +313,11 @@ async function copyFile(
 }
 
 /**
- * Delete a single file from public directory (images or menus)
+ * Delete image from public directory
  */
-async function deleteFile(sourcePath: string, fileType: 'Image' | 'Menu') {
+async function deleteImage(sourcePath: string) {
     try {
-        // Check if this was a draft-only image (skip menus)
-        if (fileType === 'Image' && await isDraftOnlyImage(sourcePath)) {
+        if (await isDraftOnlyImage(sourcePath)) {
             const fileName = path.basename(sourcePath)
             console.log(`⊗ Draft image removed from content: ${fileName}`)
             return
@@ -354,39 +327,11 @@ async function deleteFile(sourcePath: string, fileType: 'Image' | 'Menu') {
 
         if (await fs.pathExists(targetPath)) {
             await fs.remove(targetPath)
-            console.log(`✗ ${fileType} deleted: ${relativePath}`)
+            console.log(`✗ Image deleted: ${relativePath}`)
         }
     } catch (error) {
         console.error(`❌ Failed to delete ${sourcePath}:`, error)
     }
-}
-
-/**
- * Copy a single image from content to public
- */
-async function copyImage(sourcePath: string, log: boolean = true, action: string = 'copied') {
-    return copyFile(sourcePath, 'Image', log, action)
-}
-
-/**
- * Delete image from public directory
- */
-async function deleteImage(sourcePath: string) {
-    return deleteFile(sourcePath, 'Image')
-}
-
-/**
- * Copy a single _menu.yml file from content to public
- */
-async function copyMenuFile(sourcePath: string, log: boolean = true, action: string = 'copied') {
-    return copyFile(sourcePath, 'Menu', log, action)
-}
-
-/**
- * Delete _menu.yml file from public directory
- */
-async function deleteMenuFile(sourcePath: string) {
-    return deleteFile(sourcePath, 'Menu')
 }
 
 /**

@@ -128,4 +128,110 @@ describe('generated content indices', () => {
       expect(alias).toEqual(expect.objectContaining({ path: '/', title: 'Homepage' }))
     })
   })
+
+  describe('mdsite.yml menu lookup', () => {
+    async function readNavigation() {
+      return JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
+    }
+
+    it('reads menu from MDSITE_CONFIG_PATH when it points to a mdsite.yml', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome home.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nUseful guide.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'about.md'), '# About\n\nAbout us.', 'utf8')
+
+      const mdsitePath = path.join(tempDir, 'mdsite.yml')
+      await fs.writeFile(mdsitePath, [
+        'site:',
+        '  name: Test Site',
+        'menu:',
+        '  - index',
+        '  - guide',
+        '',
+      ].join('\n'), 'utf8')
+      process.env.MDSITE_CONFIG_PATH = mdsitePath
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      expect(navigation).toEqual([
+        expect.objectContaining({ path: '/', title: 'Home' }),
+        expect.objectContaining({ path: '/guide', title: 'Guide' }),
+      ])
+      // about.md exists but is not in the menu
+      expect(navigation.find((n: { path: string }) => n.path === '/about')).toBeUndefined()
+    })
+
+    it('reads menu from ../mdsite.yml relative to content dir when MDSITE_CONFIG_PATH is unset', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome home.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nUseful guide.', 'utf8')
+
+      // mdsite.yml lives one level up from contentDir (e.g. sibling of the content dir)
+      const mdsitePath = path.join(tempDir, 'mdsite.yml')
+      await fs.writeFile(mdsitePath, [
+        'menu:',
+        '  - guide',
+        '',
+      ].join('\n'), 'utf8')
+      delete process.env.MDSITE_CONFIG_PATH
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      expect(navigation).toEqual([
+        expect.objectContaining({ path: '/guide', title: 'Guide' }),
+      ])
+    })
+
+    it('prefers _menu.yml over mdsite.yml when both exist (legacy precedence)', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nContent.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'about.md'), '# About\n\nAbout.', 'utf8')
+
+      // Legacy _menu.yml lists only index + guide
+      await fs.writeFile(path.join(contentDir, '_menu.yml'), '- index\n- guide\n', 'utf8')
+      // mdsite.yml in same content dir would otherwise list index + about
+      await fs.writeFile(path.join(contentDir, 'mdsite.yml'), [
+        'menu:',
+        '  - index',
+        '  - about',
+        '',
+      ].join('\n'), 'utf8')
+      delete process.env.MDSITE_CONFIG_PATH
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      const paths = navigation.map((n: { path: string }) => n.path)
+      expect(paths).toEqual(['/', '/guide'])
+      // about.md is not in the legacy menu, so it should not appear
+      expect(navigation.find((n: { path: string }) => n.path === '/about')).toBeUndefined()
+    })
+
+    it('skips mdsite.yml candidates that have no menu key and falls through to a later candidate', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nContent.', 'utf8')
+
+      // ../mdsite.yml exists but has no menu key - should not be used
+      const parentMdsite = path.join(tempDir, 'mdsite.yml')
+      await fs.writeFile(parentMdsite, [
+        'site:',
+        '  name: Test Site',
+        '',
+      ].join('\n'), 'utf8')
+      // contentDir/mdsite.yml has a real menu - should win as the next candidate
+      await fs.writeFile(path.join(contentDir, 'mdsite.yml'), [
+        'menu:',
+        '  - guide',
+        '',
+      ].join('\n'), 'utf8')
+      delete process.env.MDSITE_CONFIG_PATH
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      expect(navigation).toEqual([
+        expect.objectContaining({ path: '/guide', title: 'Guide' }),
+      ])
+    })
+  })
 })

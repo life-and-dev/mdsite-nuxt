@@ -111,6 +111,24 @@ export interface MinimalTreeNode {
 type MenuItemType = string | { [key: string]: string | null | MenuItemType[] } | null
 
 /**
+ * Normalize URL path so a trailing /index resolves to its parent.
+ * Mirrors filePathToUrlPath behavior so menu paths match content routes.
+ *
+ * Examples:
+ *   /index          -> /
+ *   /features/index -> /features
+ *   /               -> /
+ *   /architecture   -> /architecture
+ */
+function normalizeIndexPath(resolvedPath: string): string {
+    if (resolvedPath === '/index') return '/'
+    if (resolvedPath.endsWith('/index')) {
+        return resolvedPath.slice(0, -('/index'.length))
+    }
+    return resolvedPath
+}
+
+/**
  * Resolve relative/absolute paths in menu
  */
 function resolvePath(menuPath: string, contextPath: string): string {
@@ -197,7 +215,7 @@ async function processMenuItems(
             nodes.push({
                 id: `${resolvedPath.split('/').filter(Boolean).pop() || 'home'}-${order}`,
                 title: title || item,
-                path: resolvedPath,
+                path: normalizeIndexPath(resolvedPath),
                 type: 'link',
                 description,
                 isPrimary: true
@@ -270,7 +288,7 @@ async function processMenuItems(
                     nodes.push({
                         id: `${submenuPath.split('/').filter(Boolean).pop() || 'home'}-${order}`,
                         title: title || key,
-                        path: submenuPath,
+                        path: normalizeIndexPath(submenuPath),
                         type: 'link',
                         description,
                         isPrimary: true,
@@ -299,7 +317,7 @@ async function processMenuItems(
                     nodes.push({
                         id: `link-${key.replace(/\s+/g, '-').toLowerCase()}-${order}`,
                         title: key,
-                        path: resolvedPath,
+                        path: normalizeIndexPath(resolvedPath),
                         type: 'link',
                         description,
                         isPrimary: false // Aliases are NOT primary

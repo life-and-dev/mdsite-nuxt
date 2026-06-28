@@ -54,4 +54,78 @@ describe('generated content indices', () => {
       }),
     ])
   })
+
+  describe('index path normalization in navigation', () => {
+    async function readNavigation() {
+      return JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
+    }
+
+    it('normalizes top-level string "index" to path "/"', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome.', 'utf8')
+      await fs.writeFile(path.join(contentDir, '_menu.yml'), '- index\n- guide\n', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nContent.', 'utf8')
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      const home = navigation.find((n: { path: string }) => n.path === '/')
+      expect(home).toBeDefined()
+      expect(home).toEqual(expect.objectContaining({ path: '/', title: 'Home' }))
+      // No node should still have /index after normalization
+      const leaked = navigation.find((n: { path: string }) => n.path === '/index')
+      expect(leaked).toBeUndefined()
+    })
+
+    it('preserves non-index paths', async () => {
+      await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nContent.', 'utf8')
+      await fs.writeFile(path.join(contentDir, '_menu.yml'), '- guide\n', 'utf8')
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      expect(navigation).toEqual([
+        expect.objectContaining({ path: '/guide', title: 'Guide' }),
+      ])
+    })
+
+    it('normalizes submenu key "index" to path "/"', async () => {
+      await fs.mkdir(path.join(contentDir, 'features'), { recursive: true })
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'features', 'index.md'), '# Features Landing\n\nOverview.', 'utf8')
+      await fs.writeFile(path.join(contentDir, '_menu.yml'), [
+        '- index:',
+        '    - features/bible-tooltips',
+        '- features:',
+        '    - index',
+        '    - features/source-edit',
+        '',
+      ].join('\n'), 'utf8')
+      await fs.writeFile(path.join(contentDir, 'features', 'bible-tooltips.md'), '# Bible Tooltips\n\nContent.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'features', 'source-edit.md'), '# Source Edit\n\nContent.', 'utf8')
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      // Top-level "index:" submenu key -> "/"
+      const topIndex = navigation.find((n: { path: string, children?: unknown[] }) => n.path === '/')
+      expect(topIndex).toBeDefined()
+      expect(Array.isArray(topIndex!.children)).toBe(true)
+      // Nested "index" under features submenu -> "/features"
+      const featuresNode = navigation.find((n: { path: string, children?: unknown[] }) => n.path === '/features')
+      expect(featuresNode).toBeDefined()
+      const nestedIndex = featuresNode!.children!.find((c: { path: string }) => c.path === '/features')
+      expect(nestedIndex).toBeDefined()
+    })
+
+    it('normalizes alias (custom title) targeting "index" to path "/"', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome.', 'utf8')
+      await fs.writeFile(path.join(contentDir, '_menu.yml'), '- Homepage: index\n', 'utf8')
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      const alias = navigation.find((n: { title: string, path: string }) => n.title === 'Homepage')
+      expect(alias).toEqual(expect.objectContaining({ path: '/', title: 'Homepage' }))
+    })
+  })
 })

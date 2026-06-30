@@ -3,11 +3,13 @@
 import sharp from 'sharp'
 import fs from 'fs-extra'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath } from 'node:url'
 import { loadMdsiteConfigSync, resolveMdsiteConfigPath } from '../utils/mdsite-config.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+const DEFAULT_FAVICON_PATH = fileURLToPath(new URL('../assets/default-favicon.svg', import.meta.url))
 
 const FAVICON_SIZES = {
   ico: [16, 32],
@@ -16,28 +18,56 @@ const FAVICON_SIZES = {
   pwaIcon512: 512
 } as const
 
+export function resolveFaviconSource(
+  contentDir: string,
+  favicon: string,
+): { sourcePath: string; isDefault: boolean } | null {
+  if (typeof favicon === 'string' && favicon.trim().length > 0) {
+    const candidate = path.resolve(contentDir, favicon)
+    if (fs.pathExistsSync(candidate)) {
+      return { sourcePath: candidate, isDefault: false }
+    }
+  }
+
+  if (fs.pathExistsSync(DEFAULT_FAVICON_PATH)) {
+    return { sourcePath: DEFAULT_FAVICON_PATH, isDefault: true }
+  }
+
+  return null
+}
+
+export interface GenerateFaviconsOptions {
+  contentDir?: string
+  config?: { favicon?: string; site?: { name?: string } }
+  outputDir?: string
+}
+
 /**
  * Generate favicons from the active mdsite config
  */
-export async function generateFavicons(): Promise<boolean> {
-  const { contentDir, config } = loadMdsiteConfigSync()
+export async function generateFavicons(options: GenerateFaviconsOptions = {}): Promise<boolean> {
+  const resolved = options.contentDir && options.config
+    ? { contentDir: options.contentDir, config: options.config }
+    : loadMdsiteConfigSync()
+  const { contentDir, config } = resolved
+  const siteName = (config as { site?: { name?: string } }).site?.name ?? 'site'
 
-  if (!config.favicon || !config.favicon.trim()) {
-    console.warn(`⚠️ No favicon source configured (config.favicon is empty). Skipping favicon generation.`)
+  const resolvedSource = resolveFaviconSource(contentDir, config.favicon ?? '')
+
+  if (!resolvedSource) {
+    console.error('❌ No favicon source available (configured source missing AND bundled default not found).')
     return false
   }
 
-  const sourcePath = path.resolve(contentDir, config.favicon)
-
-  if (!await fs.pathExists(sourcePath)) {
-    console.error(`❌ Favicon source not found: ${sourcePath}`)
-    return false
-  }
-
-  const publicDir = path.resolve(__dirname, '..', 'public')
+  const { sourcePath } = resolvedSource
+  const publicDir = options.outputDir ?? path.resolve(__dirname, '..', 'public')
   await fs.ensureDir(publicDir)
 
-  console.log(`🎨 Generating favicons for site: ${config.site.name}`)
+  if (resolvedSource.isDefault) {
+    console.log('ℹ️ No favicon source configured (config.favicon empty or file not found). Using bundled default favicon.')
+  }
+
+  console.log(`🎨 Generating favicons for site: ${siteName}`)
   console.log(`   Source: ${sourcePath}`)
   console.log(`   Output: ${publicDir}`)
 
@@ -92,10 +122,10 @@ export async function generateFavicons(): Promise<boolean> {
       .toFile(icon512Path)
     console.log(`   ✓ PWA Icon 512: icon-512.png`)
 
-    console.log(`✅ Favicons generated successfully for ${config.site.name}\n`)
+    console.log(`✅ Favicons generated successfully for ${siteName}\n`)
     return true
   } catch (error) {
-    console.error(`❌ Failed to generate favicons for ${config.site.name}:`, error)
+    console.error(`❌ Failed to generate favicons for ${siteName}:`, error)
     return false
   }
 }

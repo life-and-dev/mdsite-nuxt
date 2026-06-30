@@ -15,6 +15,7 @@
 </template>
 
 <script setup lang="ts">
+import { withBasePath } from '../../utils/base-url'
 const route = useRoute()
 
 // Query content using Nuxt Content v3 API
@@ -29,6 +30,7 @@ const { data: page, pending } = await useAsyncData(
 const siteConfig = useSiteConfig()
 const title = page.value?.title || 'Page'
 const description = page.value?.description || ''
+const appBaseURL = useRuntimeConfig().app.baseURL
 
 useHead(() => ({
   title,
@@ -42,9 +44,9 @@ useHead(() => ({
     // Open Graph
     { property: 'og:title', content: title },
     { property: 'og:description', content: description },
-    { property: 'og:url', content: `${siteConfig.siteCanonical}${route.path}` },
+    { property: 'og:url', content: siteConfig.siteCanonical ? `${siteConfig.siteCanonical}${route.path}` : withBasePath(route.path, appBaseURL) },
     { property: 'og:type', content: 'article' },
-    { property: 'og:image', content: '/icon-512.png' }
+    { property: 'og:image', content: withBasePath('/icon-512.png', appBaseURL) }
   ],
   link: [
     ...(siteConfig.siteCanonical ? [{ rel: 'canonical', href: `${siteConfig.siteCanonical}${route.path}` }] : [])

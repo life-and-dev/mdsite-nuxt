@@ -15,6 +15,7 @@
 </template>
 
 <script setup lang="ts">
+import { withBasePath } from '../../utils/base-url'
 // Query home page content using Nuxt Content v3 API
 // server: true = Only query during SSR/prerendering, never on client
 // This prevents 3.5MB database download - client uses prerendered HTML
@@ -27,6 +28,7 @@ const { data: page, pending } = await useAsyncData(
 const siteConfig = useSiteConfig()
 const title = page.value?.title || siteConfig.siteName || 'Home'
 const description = page.value?.description || ''
+const appBaseURL = useRuntimeConfig().app.baseURL
 
 useHead(() => ({
   title,
@@ -40,9 +42,9 @@ useHead(() => ({
     // Open Graph
     { property: 'og:title', content: title },
     { property: 'og:description', content: description },
-    { property: 'og:url', content: siteConfig.siteCanonical },
+    { property: 'og:url', content: siteConfig.siteCanonical || withBasePath('/', appBaseURL) },
     { property: 'og:type', content: 'website' },
-    { property: 'og:image', content: '/icon-512.png' }
+    { property: 'og:image', content: withBasePath('/icon-512.png', appBaseURL) }
   ],
   link: [
     ...(siteConfig.siteCanonical ? [{ rel: 'canonical', href: siteConfig.siteCanonical }] : [])

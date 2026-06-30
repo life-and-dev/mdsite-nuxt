@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   buildContentDataMock,
-  copyFaviconsToPublicMock,
   existsSyncMock,
   generateFaviconsMock,
   generateWebManifestMock,
@@ -20,7 +19,6 @@ const {
   writeFileSyncMock,
 } = vi.hoisted(() => ({
   buildContentDataMock: vi.fn(),
-  copyFaviconsToPublicMock: vi.fn(),
   existsSyncMock: vi.fn(),
   generateFaviconsMock: vi.fn(),
   generateWebManifestMock: vi.fn(),
@@ -60,7 +58,6 @@ vi.mock('./generate-indices.js', () => ({
 }))
 
 vi.mock('./generate-favicons.js', () => ({
-  copyFaviconsToPublic: copyFaviconsToPublicMock,
   generateFavicons: generateFaviconsMock,
   generateWebManifest: generateWebManifestMock,
 }))
@@ -99,7 +96,6 @@ describe('renderer hooks orchestration', () => {
     stringifyYamlMock.mockReturnValue('compat-config')
     generateFaviconsMock.mockResolvedValue(true)
     buildContentDataMock.mockResolvedValue(undefined)
-    copyFaviconsToPublicMock.mockResolvedValue(undefined)
     generateWebManifestMock.mockResolvedValue(undefined)
     startWatcherMock.mockResolvedValue(undefined)
     syncContentMock.mockResolvedValue(undefined)
@@ -255,7 +251,6 @@ describe('renderer hooks orchestration', () => {
     expect(syncContentMock).toHaveBeenCalledTimes(1)
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
     expect(generateFaviconsMock).toHaveBeenCalledTimes(1)
-    expect(copyFaviconsToPublicMock).toHaveBeenCalledTimes(1)
     expect(generateWebManifestMock).toHaveBeenCalledWith('Docs')
     expect(syncContentMock.mock.invocationCallOrder[0]).toBeLessThan(buildContentDataMock.mock.invocationCallOrder[0])
     expect(buildContentDataMock.mock.invocationCallOrder[0]).toBeLessThan(generateFaviconsMock.mock.invocationCallOrder[0])
@@ -268,7 +263,6 @@ describe('renderer hooks orchestration', () => {
     expect(syncContentMock).toHaveBeenCalledTimes(1)
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
     expect(generateFaviconsMock).toHaveBeenCalledTimes(1)
-    expect(copyFaviconsToPublicMock).toHaveBeenCalledTimes(1)
     expect(generateWebManifestMock).toHaveBeenCalledWith('Docs')
     expect(startWatcherMock).not.toHaveBeenCalled()
     expect(rmMock).not.toHaveBeenCalled()
@@ -292,7 +286,6 @@ describe('renderer hooks orchestration', () => {
 
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
     expect(generateFaviconsMock).toHaveBeenCalledTimes(1)
-    expect(copyFaviconsToPublicMock).not.toHaveBeenCalled()
     expect(generateWebManifestMock).not.toHaveBeenCalled()
   })
 
@@ -304,7 +297,6 @@ describe('renderer hooks orchestration', () => {
     expect(syncContentMock).toHaveBeenCalledTimes(1)
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
     expect(generateFaviconsMock).toHaveBeenCalledTimes(1)
-    expect(copyFaviconsToPublicMock).not.toHaveBeenCalled()
     expect(generateWebManifestMock).not.toHaveBeenCalled()
     expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
   })

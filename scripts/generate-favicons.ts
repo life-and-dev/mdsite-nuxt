@@ -19,45 +19,49 @@ const FAVICON_SIZES = {
 /**
  * Generate favicons from the active mdsite config
  */
-export async function generateFavicons() {
+export async function generateFavicons(): Promise<boolean> {
   const { contentDir, config } = loadMdsiteConfigSync()
-  const logoPath = path.join(contentDir, 'logo.svg')
-  const faviconDir = path.join(contentDir, 'favicon')
 
-  // Check if logo exists
-  if (!await fs.pathExists(logoPath)) {
-    console.error(`❌ Logo not found: ${logoPath}`)
+  if (!config.favicon || !config.favicon.trim()) {
+    console.warn(`⚠️ No favicon source configured (config.favicon is empty). Skipping favicon generation.`)
     return false
   }
 
-  await fs.ensureDir(faviconDir)
+  const sourcePath = path.resolve(contentDir, config.favicon)
+
+  if (!await fs.pathExists(sourcePath)) {
+    console.error(`❌ Favicon source not found: ${sourcePath}`)
+    return false
+  }
+
+  const publicDir = path.resolve(__dirname, '..', 'public')
+  await fs.ensureDir(publicDir)
 
   console.log(`🎨 Generating favicons for site: ${config.site.name}`)
-  console.log(`   Source: ${logoPath}`)
-  console.log(`   Output: ${faviconDir}`)
+  console.log(`   Source: ${sourcePath}`)
+  console.log(`   Output: ${publicDir}`)
 
   try {
     // Copy SVG as-is (for modern browsers)
-    const svgTargetPath = path.join(faviconDir, 'favicon.svg')
-    await fs.copy(logoPath, svgTargetPath)
+    const svgTargetPath = path.join(publicDir, 'favicon.svg')
+    await fs.copy(sourcePath, svgTargetPath)
     console.log(`   ✓ SVG: favicon.svg`)
 
     // Generate ICO (32x32 with transparent padding)
-    const icoTargetPath = path.join(faviconDir, 'favicon.ico')
-    const png32Buffer = await sharp(logoPath)
+    const icoTargetPath = path.join(publicDir, 'favicon.ico')
+    const png32Buffer = await sharp(sourcePath)
       .resize(32, 32, {
         fit: 'contain',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
       })
       .png()
       .toBuffer()
-
     await fs.writeFile(icoTargetPath, png32Buffer)
     console.log(`   ✓ ICO: favicon.ico`)
 
     // Generate Apple Touch Icon (180x180 with transparent padding)
-    const appleTouchPath = path.join(faviconDir, 'apple-touch-icon.png')
-    await sharp(logoPath)
+    const appleTouchPath = path.join(publicDir, 'apple-touch-icon.png')
+    await sharp(sourcePath)
       .resize(FAVICON_SIZES.appleTouchIcon, FAVICON_SIZES.appleTouchIcon, {
         fit: 'contain',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
@@ -67,8 +71,8 @@ export async function generateFavicons() {
     console.log(`   ✓ Apple Touch Icon: apple-touch-icon.png`)
 
     // Generate PWA Icon 192x192
-    const icon192Path = path.join(faviconDir, 'icon-192.png')
-    await sharp(logoPath)
+    const icon192Path = path.join(publicDir, 'icon-192.png')
+    await sharp(sourcePath)
       .resize(FAVICON_SIZES.pwaIcon192, FAVICON_SIZES.pwaIcon192, {
         fit: 'contain',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
@@ -78,8 +82,8 @@ export async function generateFavicons() {
     console.log(`   ✓ PWA Icon 192: icon-192.png`)
 
     // Generate PWA Icon 512x512
-    const icon512Path = path.join(faviconDir, 'icon-512.png')
-    await sharp(logoPath)
+    const icon512Path = path.join(publicDir, 'icon-512.png')
+    await sharp(sourcePath)
       .resize(FAVICON_SIZES.pwaIcon512, FAVICON_SIZES.pwaIcon512, {
         fit: 'contain',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
@@ -94,40 +98,6 @@ export async function generateFavicons() {
     console.error(`❌ Failed to generate favicons for ${config.site.name}:`, error)
     return false
   }
-}
-
-/**
- * Copy favicon files from content submodule to public directory
- */
-export async function copyFaviconsToPublic() {
-  const projectRoot = path.resolve(__dirname, '..')
-  const { contentDir, config } = loadMdsiteConfigSync()
-  const faviconDir = path.join(contentDir, 'favicon')
-  const publicDir = path.join(projectRoot, 'public')
-
-  console.log(`📋 Copying ${config.site.name} favicons to public...`)
-
-  const files = [
-    'favicon.svg',
-    'favicon.ico',
-    'apple-touch-icon.png',
-    'icon-192.png',
-    'icon-512.png'
-  ]
-
-  for (const file of files) {
-    const sourcePath = path.join(faviconDir, file)
-    const targetPath = path.join(publicDir, file)
-
-    if (await fs.pathExists(sourcePath)) {
-      await fs.copy(sourcePath, targetPath)
-      console.log(`   ✓ ${file}`)
-    } else {
-      console.warn(`   ⚠ Missing: ${file}`)
-    }
-  }
-
-  console.log(`✅ Favicon copy complete\n`)
 }
 
 /**
@@ -183,7 +153,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ; (async () => {
       const success = await generateFavicons()
       if (success) {
-        await copyFaviconsToPublic()
         await generateWebManifest(config.site.name)
       } else {
         process.exit(1)

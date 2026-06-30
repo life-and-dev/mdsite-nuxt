@@ -3,7 +3,7 @@ import path from 'path'
 import YAML from 'yaml'
 
 import { buildContentData } from './generate-indices.js'
-import { generateFavicons, copyFaviconsToPublic, generateWebManifest } from './generate-favicons.js'
+import { generateFavicons, generateWebManifest } from './generate-favicons.js'
 import { startWatcher, syncContent } from './sync-content.js'
 import { loadMdsiteConfigSync, resolveMdsiteConfigPath } from '../utils/mdsite-config.js'
 
@@ -95,7 +95,6 @@ async function generateFaviconAssets(siteName: string): Promise<void> {
   const success = await generateFavicons()
 
   if (success) {
-    await copyFaviconsToPublic()
     await generateWebManifest(siteName)
     console.log(`✅ Favicons ready for ${siteName}\n`)
   }

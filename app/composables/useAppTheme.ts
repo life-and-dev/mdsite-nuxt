@@ -31,6 +31,21 @@ export const useAppTheme = () => {
     }
   }
 
+  // Read the data-mdsite-theme marker set by the inline head script before paint.
+  const readMarkerTheme = (): ThemeMode | null => {
+    if (!import.meta.client) return null
+    const attr = document.documentElement.getAttribute('data-mdsite-theme')
+    return attr === 'light' || attr === 'dark' ? attr : null
+  }
+
+  // Mirror the active theme onto the <html> marker so the inline override CSS
+  // (and the next paint) stay consistent with Vuetify's runtime state.
+  const writeMarkerTheme = (theme: ThemeMode): void => {
+    if (import.meta.client) {
+      document.documentElement.setAttribute('data-mdsite-theme', theme)
+    }
+  }
+
   // Reactive theme preference
   const themePreference = ref<ThemeMode>('light')
 
@@ -50,6 +65,7 @@ export const useAppTheme = () => {
     themePreference.value = theme
     setStoredTheme(theme)
     applyTheme(theme)
+    writeMarkerTheme(theme)
   }
 
   // Toggle between light and dark
@@ -61,7 +77,10 @@ export const useAppTheme = () => {
   // Initialize theme on mount
   onMounted(() => {
     const storedTheme = getStoredTheme()
-    const initialTheme = storedTheme || getSystemTheme()
+    // Prefer the inline head-script marker: it already encoded stored-or-system
+    // before first paint, so reading it here keeps the composable in lockstep
+    // with the color override that the user actually saw.
+    const initialTheme = readMarkerTheme() ?? storedTheme ?? getSystemTheme()
 
     themePreference.value = initialTheme
     applyTheme(initialTheme)
@@ -70,12 +89,12 @@ export const useAppTheme = () => {
     if (import.meta.client && !storedTheme) {
       const media = window.matchMedia('(prefers-color-scheme: dark)')
       media.addEventListener('change', (e) => {
-        // Only react to system changes if user hasn't manually set a valid preference (optional logic, but matches typical behavior)
-        // For now, let's just update if no stored theme
+        // Only follow the system while the user hasn't chosen a preference.
         if (!getStoredTheme()) {
           const newSystemTheme = e.matches ? 'dark' : 'light'
           themePreference.value = newSystemTheme
           applyTheme(newSystemTheme)
+          writeMarkerTheme(newSystemTheme)
         }
       })
     }

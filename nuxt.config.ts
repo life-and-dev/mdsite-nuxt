@@ -1,6 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import path from 'path'
-import { getDomainThemes } from './app/config/themes'
+import { buildDarkOverrideCss, getDomainThemes } from './app/config/themes'
 import { createBibleReferencePatterns } from './app/utils/bible-book-names'
 import { runBuildFallbackHooks } from './scripts/renderer-hooks'
 import { withBasePath } from './utils/base-url'
@@ -59,6 +59,16 @@ export default defineNuxtConfig({
   app: {
     baseURL: appBaseURL,
     head: {
+      style: [
+        { innerHTML: buildDarkOverrideCss() }
+      ],
+      script: [
+        {
+          tagPosition: 'head',
+          tagPriority: 'critical',
+          innerHTML: `(function(){try{var t=localStorage.getItem('theme-preference');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-mdsite-theme',t);}catch(e){document.documentElement.setAttribute('data-mdsite-theme','light');}})();`
+        }
+      ],
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: withBasePath('/favicon.svg', appBaseURL), sizes: 'any' },
         { rel: 'icon', type: 'image/x-icon', href: withBasePath('/favicon.ico', appBaseURL), sizes: '32x32' },

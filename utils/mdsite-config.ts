@@ -164,7 +164,8 @@ export function resolveContentDir(options: {
 
   if (resolvedConfigPath) {
     const configDir = path.dirname(resolvedConfigPath);
-    return typeof rawConfig.content?.path === 'string' ? path.resolve(configDir, rawConfig.content.path) : configDir;
+    const contentPath = resolveContentConfigPath(rawConfig.content);
+    return contentPath ? path.resolve(configDir, contentPath) : configDir;
   }
 
   if (options.searchFrom) {
@@ -172,6 +173,24 @@ export function resolveContentDir(options: {
   }
 
   return process.cwd();
+}
+
+/**
+ * Extract the content path from either the shorthand string form
+ * (`content: docs`) or the explicit object form (`content:\n  path: docs`).
+ * Returns undefined when no usable path is configured.
+ */
+function resolveContentConfigPath(rawContent: unknown): string | undefined {
+  if (typeof rawContent === 'string') {
+    const trimmed = rawContent.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  if (rawContent && typeof rawContent === 'object' && typeof (rawContent as { path?: unknown }).path === 'string') {
+    return (rawContent as { path: string }).path;
+  }
+
+  return undefined;
 }
 
 function createDefaultMdsiteConfig(siteName: string): MdsiteConfig {
@@ -204,6 +223,7 @@ function createDefaultMdsiteConfig(siteName: string): MdsiteConfig {
 
 function normalizeMdsiteConfig(rawConfig: Record<string, any>, contentDir: string): MdsiteConfig {
   const fallbackConfig = createDefaultMdsiteConfig(path.basename(contentDir) || 'Site');
+  const contentPath = resolveContentConfigPath(rawConfig.content);
 
   return {
     favicon: typeof rawConfig.favicon === 'string' ? rawConfig.favicon : fallbackConfig.favicon,
@@ -211,7 +231,7 @@ function normalizeMdsiteConfig(rawConfig: Record<string, any>, contentDir: strin
       bibleTooltips: rawConfig.features?.bibleTooltips ?? fallbackConfig.features.bibleTooltips,
       sourceEdit: rawConfig.features?.sourceEdit ?? fallbackConfig.features.sourceEdit
     },
-    content: typeof rawConfig.content?.path === 'string' ? { path: rawConfig.content.path } : fallbackConfig.content,
+    content: contentPath ? { path: contentPath } : fallbackConfig.content,
     menu: Array.isArray(rawConfig.menu) ? rawConfig.menu : fallbackConfig.menu,
     server: {
       output: typeof rawConfig.server?.output === 'string' ? rawConfig.server.output : fallbackConfig.server.output,

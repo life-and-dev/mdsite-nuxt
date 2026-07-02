@@ -5,7 +5,7 @@ import YAML from 'yaml'
 import { buildContentData } from './generate-indices.js'
 import { generateFavicons, generateWebManifest } from './generate-favicons.js'
 import { startWatcher, syncContent } from './sync-content.js'
-import { loadMdsiteConfigSync, resolveMdsiteConfigPath } from '../utils/mdsite-config.js'
+import { loadMdsiteConfigSync, resolveMdsiteConfigPath, type MdsiteConfig } from '../utils/mdsite-config.js'
 
 export interface RendererRuntime {
   config: ReturnType<typeof loadMdsiteConfigSync>['config']
@@ -69,7 +69,7 @@ export async function runSetupHooks(mode: 'setup' | 'build' | 'generate' | 'dev'
     if (!options.cached) {
       await fs.promises.rm(path.join(rootDir, '.data'), { recursive: true, force: true })
     }
-
+    await generateDevManifestAssets(runtime.config)
     process.env.MDSITE_RENDERER_ORCHESTRATED = '1'
     await startWatcher()
     return runtime
@@ -78,26 +78,30 @@ export async function runSetupHooks(mode: 'setup' | 'build' | 'generate' | 'dev'
   await syncContent()
   console.log(`\n🔨 Generating navigation and search index...`)
   await buildContentData()
-  await generateFaviconAssets(runtime.config.site.name)
+  await generateFaviconAssets(runtime.config)
   process.env.MDSITE_RENDERER_ORCHESTRATED = '1'
 
   return runtime
 }
 
-export async function runBuildFallbackHooks(siteName: string): Promise<void> {
+export async function runBuildFallbackHooks(config: MdsiteConfig): Promise<void> {
   console.log(`\n🔨 Generating navigation and search index...`)
   await buildContentData()
-  await generateFaviconAssets(siteName)
+  await generateFaviconAssets(config)
 }
 
-async function generateFaviconAssets(siteName: string): Promise<void> {
+async function generateFaviconAssets(config: MdsiteConfig): Promise<void> {
   console.log(`\n🎨 Generating favicons for build...`)
   const success = await generateFavicons()
 
   if (success) {
-    await generateWebManifest(siteName)
-    console.log(`✅ Favicons ready for ${siteName}\n`)
+    await generateWebManifest({ name: config.site.name, themes: config.themes })
+    console.log(`✅ Favicons ready for ${config.site.name}\n`)
   }
+}
+
+async function generateDevManifestAssets(config: MdsiteConfig): Promise<void> {
+  await generateWebManifest({ name: config.site.name, themes: config.themes })
 }
 
 function ensureLegacyCompatibilityConfig(rootDir: string): string | undefined {

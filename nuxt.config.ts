@@ -160,7 +160,7 @@ export default defineNuxtConfig({
         return
       }
 
-      await runBuildFallbackHooks(siteConfig.site.name)
+      await runBuildFallbackHooks(siteConfig)
     }
   },
 

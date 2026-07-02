@@ -87,7 +87,20 @@ describe('renderer hooks orchestration', () => {
 
     resolveMdsiteConfigPathMock.mockReturnValue('/renderer/mdsite.yml')
     loadMdsiteConfigSyncMock.mockReturnValue({
-      config: { site: { name: 'Docs' } },
+      config: {
+        site: { name: 'Docs' },
+        themes: {
+          light: {
+            colors: {
+              primary: '#abcdef',
+              surface: '#fedcba',
+            },
+          },
+          dark: {
+            colors: {},
+          },
+        },
+      },
       configPath: '/renderer/mdsite.yml',
       contentDir: '/renderer/docs',
     })
@@ -117,7 +130,13 @@ describe('renderer hooks orchestration', () => {
       contentPath: '/input/docs',
     })
     expect(runtime).toEqual({
-      config: { site: { name: 'Docs' } },
+      config: {
+        site: { name: 'Docs' },
+        themes: {
+          light: { colors: { primary: '#abcdef', surface: '#fedcba' } },
+          dark: { colors: {} },
+        },
+      },
       configPath: '/renderer/mdsite.yml',
       contentDir: '/renderer/docs',
       rootDir: '/renderer',
@@ -233,6 +252,15 @@ describe('renderer hooks orchestration', () => {
     expect(syncContentMock).not.toHaveBeenCalled()
     expect(buildContentDataMock).not.toHaveBeenCalled()
     expect(generateFaviconsMock).not.toHaveBeenCalled()
+    expect(generateWebManifestMock).toHaveBeenCalledTimes(1)
+    expect(generateWebManifestMock).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Docs',
+      themes: expect.objectContaining({
+        light: expect.objectContaining({
+          colors: expect.objectContaining({ primary: '#abcdef' }),
+        }),
+      }),
+    }))
     expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
     expect(runtime.contentDir).toBe('/renderer/docs')
   })
@@ -243,6 +271,7 @@ describe('renderer hooks orchestration', () => {
     expect(rmMock).not.toHaveBeenCalled()
     expect(startWatcherMock).toHaveBeenCalledTimes(1)
     expect(syncContentMock).not.toHaveBeenCalled()
+    expect(generateWebManifestMock).toHaveBeenCalledTimes(1)
   })
 
   it('runs non-dev setup hooks in orchestration order and publishes favicon assets on success', async () => {
@@ -251,7 +280,14 @@ describe('renderer hooks orchestration', () => {
     expect(syncContentMock).toHaveBeenCalledTimes(1)
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
     expect(generateFaviconsMock).toHaveBeenCalledTimes(1)
-    expect(generateWebManifestMock).toHaveBeenCalledWith('Docs')
+    expect(generateWebManifestMock).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Docs',
+      themes: expect.objectContaining({
+        light: expect.objectContaining({
+          colors: expect.objectContaining({ primary: '#abcdef' }),
+        }),
+      }),
+    }))
     expect(syncContentMock.mock.invocationCallOrder[0]).toBeLessThan(buildContentDataMock.mock.invocationCallOrder[0])
     expect(buildContentDataMock.mock.invocationCallOrder[0]).toBeLessThan(generateFaviconsMock.mock.invocationCallOrder[0])
     expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
@@ -263,7 +299,14 @@ describe('renderer hooks orchestration', () => {
     expect(syncContentMock).toHaveBeenCalledTimes(1)
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
     expect(generateFaviconsMock).toHaveBeenCalledTimes(1)
-    expect(generateWebManifestMock).toHaveBeenCalledWith('Docs')
+    expect(generateWebManifestMock).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Docs',
+      themes: expect.objectContaining({
+        light: expect.objectContaining({
+          colors: expect.objectContaining({ primary: '#abcdef' }),
+        }),
+      }),
+    }))
     expect(startWatcherMock).not.toHaveBeenCalled()
     expect(rmMock).not.toHaveBeenCalled()
     expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
@@ -282,7 +325,7 @@ describe('renderer hooks orchestration', () => {
   it('runs build fallback hooks without publishing favicon assets when generation reports no output', async () => {
     generateFaviconsMock.mockResolvedValue(false)
 
-    await runBuildFallbackHooks('Docs')
+    await runBuildFallbackHooks({ site: { name: 'Docs' }, themes: { light: { colors: {} }, dark: { colors: {} } } } as any)
 
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
     expect(generateFaviconsMock).toHaveBeenCalledTimes(1)

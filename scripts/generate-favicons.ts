@@ -4,7 +4,7 @@ import sharp from 'sharp'
 import fs from 'fs-extra'
 import path from 'path'
 import { fileURLToPath } from 'node:url'
-import { loadMdsiteConfigSync, resolveMdsiteConfigPath } from '../utils/mdsite-config.js'
+import { loadMdsiteConfigSync, resolveMdsiteConfigPath, type MdsiteConfig } from '../utils/mdsite-config.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -130,17 +130,30 @@ export async function generateFavicons(options: GenerateFaviconsOptions = {}): P
   }
 }
 
+export interface GenerateWebManifestOptions {
+  name?: string
+  themes?: MdsiteConfig['themes']
+  outputDir?: string
+}
+
 /**
- * Generate web manifest for PWA support
+ * Generate web manifest for PWA support.
+ * Theme/background colors are taken from the light theme in mdsite.yml
+ * to match the existing `<meta name="theme-color" media="(prefers-color-scheme: light)">` tag.
+ * The web manifest spec only supports a single `theme_color`, so light values are used.
  */
-export async function generateWebManifest(name: string) {
-  const projectRoot = path.resolve(__dirname, '..')
-  const publicDir = path.join(projectRoot, 'public')
-  const manifestPath = path.join(publicDir, 'site.webmanifest')
+export async function generateWebManifest(options: GenerateWebManifestOptions = {}): Promise<void> {
+  const siteName = options.name ?? 'site'
+  const themeColor = options.themes?.light?.colors?.primary ?? '#000000'
+  const backgroundColor = options.themes?.light?.colors?.surface ?? '#ffffff'
+
+  const outputDir = options.outputDir ?? path.resolve(__dirname, '..', 'public')
+  await fs.ensureDir(outputDir)
+  const manifestPath = path.join(outputDir, 'site.webmanifest')
 
   const manifest = {
-    name: name,
-    short_name: name,
+    name: siteName,
+    short_name: siteName,
     icons: [
       {
         src: 'icon-192.png',
@@ -153,13 +166,13 @@ export async function generateWebManifest(name: string) {
         type: 'image/png'
       }
     ],
-    theme_color: '#ffffff',
-    background_color: '#ffffff',
+    theme_color: themeColor,
+    background_color: backgroundColor,
     display: 'standalone'
   }
 
   await fs.writeJson(manifestPath, manifest, { spaces: 2 })
-  console.log(`📱 Web manifest generated: site.webmanifest\n`)
+  console.log(`📱 Web manifest generated: site.webmanifest (theme_color=${themeColor})\n`)
 }
 
 /**
@@ -183,7 +196,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ; (async () => {
       const success = await generateFavicons()
       if (success) {
-        await generateWebManifest(config.site.name)
+        await generateWebManifest({ name: config.site.name, themes: config.themes })
       } else {
         process.exit(1)
       }

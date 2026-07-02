@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { generateFavicons, resolveFaviconSource } from './generate-favicons.js'
+import { generateFavicons, generateWebManifest, resolveFaviconSource } from './generate-favicons.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_FAVICON_PATH = path.resolve(__dirname, '..', 'assets', 'default-favicon.svg')
@@ -118,6 +118,60 @@ describe('generate-favicons', () => {
       // And it is NOT the bundled default
       const defaultSvgContent = fs.readFileSync(DEFAULT_FAVICON_PATH, 'utf8')
       expect(writtenSvgContent).not.toBe(defaultSvgContent)
+    })
+  })
+
+  describe('generateWebManifest', () => {
+    it('writes manifest with theme colors from config when name and themes are provided', async () => {
+      const outputDir = path.join(tmpDir, 'output')
+
+      await generateWebManifest({
+        name: 'My Site',
+        themes: {
+          light: { colors: { primary: '#abcdef', surface: '#fedcba' } },
+          dark: { colors: {} },
+        },
+        outputDir,
+      })
+
+      const manifestPath = path.join(outputDir, 'site.webmanifest')
+      expect(fs.existsSync(manifestPath)).toBe(true)
+      const written = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+      expect(written).toEqual({
+        name: 'My Site',
+        short_name: 'My Site',
+        icons: [
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+        ],
+        theme_color: '#abcdef',
+        background_color: '#fedcba',
+        display: 'standalone',
+      })
+    })
+
+    it('falls back to safe defaults when themes are missing colors', async () => {
+      const outputDir = path.join(tmpDir, 'output')
+
+      await generateWebManifest({
+        name: 'No Themes',
+        themes: { light: { colors: {} }, dark: { colors: {} } },
+        outputDir,
+      })
+
+      const written = JSON.parse(fs.readFileSync(path.join(outputDir, 'site.webmanifest'), 'utf8'))
+      expect(written.theme_color).toBe('#000000')
+      expect(written.background_color).toBe('#ffffff')
+    })
+
+    it('falls back to safe defaults when themes are not provided at all', async () => {
+      const outputDir = path.join(tmpDir, 'output')
+
+      await generateWebManifest({ name: 'No Themes', outputDir })
+
+      const written = JSON.parse(fs.readFileSync(path.join(outputDir, 'site.webmanifest'), 'utf8'))
+      expect(written.theme_color).toBe('#000000')
+      expect(written.background_color).toBe('#ffffff')
     })
   })
 })

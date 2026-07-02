@@ -40,9 +40,13 @@ export const useAppTheme = () => {
 
   // Mirror the active theme onto the <html> marker so the inline override CSS
   // (and the next paint) stay consistent with Vuetify's runtime state.
+  // Also toggle a .dark class on <html> so libraries (e.g. the Shiki
+  // highlighter bundled with @nuxtjs/mdc) that key off `html.dark` or
+  // `html .dark` selectors follow the app's theme.
   const writeMarkerTheme = (theme: ThemeMode): void => {
     if (import.meta.client) {
       document.documentElement.setAttribute('data-mdsite-theme', theme)
+      document.documentElement.classList.toggle('dark', theme === 'dark')
     }
   }
 

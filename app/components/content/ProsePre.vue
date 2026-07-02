@@ -39,6 +39,10 @@ pre {
   border-radius: 1rem !important;
 }
 
+html[data-mdsite-theme="dark"] pre {
+  background-color: rgb(var(--v-theme-surface));
+}
+
 @media print {
   pre {
     background-color: white !important;

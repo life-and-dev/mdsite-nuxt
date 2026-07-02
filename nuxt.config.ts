@@ -66,7 +66,7 @@ export default defineNuxtConfig({
         {
           tagPosition: 'head',
           tagPriority: 'critical',
-          innerHTML: `(function(){try{var t=localStorage.getItem('theme-preference');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-mdsite-theme',t);}catch(e){document.documentElement.setAttribute('data-mdsite-theme','light');}})();`
+          innerHTML: `(function(){try{var t=localStorage.getItem('theme-preference');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-mdsite-theme',t);document.documentElement.classList.toggle('dark',t==='dark');}catch(e){document.documentElement.setAttribute('data-mdsite-theme','light');document.documentElement.classList.remove('dark');}})();`
         }
       ],
       link: [

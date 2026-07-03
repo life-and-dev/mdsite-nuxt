@@ -11,6 +11,7 @@ export interface RawSiteConfig {
   }
   server?: {
     repo?: string
+    gitBranch?: string
   }
   features?: {
     bibleTooltips?: boolean
@@ -52,7 +53,7 @@ export function mapSiteConfig(
     siteName: siteConfig?.site?.name || '',
     siteCanonical: siteConfig?.site?.canonical || '',
     contentGitRepo: siteConfig?.server?.repo || '',
-    contentGitBranch: 'main',
+    contentGitBranch: siteConfig?.server?.gitBranch || 'main',
     contentGitPath: '.',
     contentPath: contentPath || '.',
     features: {

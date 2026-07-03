@@ -61,6 +61,31 @@ describe('mapSiteConfig', () => {
     })
   })
 
+  describe('contentGitBranch (Edit on GitHub source)', () => {
+    it('defaults to "main" when server.gitBranch is missing', () => {
+      expect(mapSiteConfig({}, undefined).contentGitBranch).toBe('main')
+    })
+
+    it('defaults to "main" when server is missing entirely', () => {
+      expect(mapSiteConfig({ server: {} }, undefined).contentGitBranch).toBe('main')
+    })
+
+    it('reads server.gitBranch into contentGitBranch', () => {
+      const result = mapSiteConfig({
+        server: { gitBranch: 'develop' }
+      }, undefined)
+
+      expect(result.contentGitBranch).toBe('develop')
+    })
+
+    it('treats an empty string server.gitBranch as missing and falls back to "main"', () => {
+      // Whitespace-only branches are normalised away upstream in
+      // `utils/mdsite-config.ts` `normalizeMdsiteConfig`; the mapper here
+      // only falls back on the empty string, not on whitespace.
+      expect(mapSiteConfig({ server: { gitBranch: '' } }, undefined).contentGitBranch).toBe('main')
+    })
+  })
+
   describe('features', () => {
     it('defaults both feature flags to false when features is missing', () => {
       const result = mapSiteConfig({}, undefined)

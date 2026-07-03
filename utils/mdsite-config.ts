@@ -41,6 +41,7 @@ export interface MdsiteConfig {
     output: string
     path: string
     repo: string
+    gitBranch: string
   }
   site: {
     canonical: string
@@ -230,7 +231,8 @@ function createDefaultMdsiteConfig(siteName: string): MdsiteConfig {
     server: {
       output: '.output',
       path: '.mdsite',
-      repo: 'https://github.com/life-and-dev/mdsite'
+      repo: 'https://github.com/life-and-dev/mdsite',
+      gitBranch: 'main'
     },
     site: {
       canonical: '',
@@ -263,7 +265,10 @@ function normalizeMdsiteConfig(rawConfig: Record<string, any>, contentDir: strin
     server: {
       output: typeof rawConfig.server?.output === 'string' ? rawConfig.server.output : fallbackConfig.server.output,
       path: typeof rawConfig.server?.path === 'string' ? rawConfig.server.path : fallbackConfig.server.path,
-      repo: typeof rawConfig.server?.repo === 'string' ? rawConfig.server.repo : fallbackConfig.server.repo
+      repo: typeof rawConfig.server?.repo === 'string' ? rawConfig.server.repo : fallbackConfig.server.repo,
+      gitBranch: typeof rawConfig.server?.['git-branch'] === 'string' && rawConfig.server['git-branch'].trim()
+        ? rawConfig.server['git-branch']
+        : fallbackConfig.server.gitBranch
     },
     site: {
       canonical: typeof rawConfig.site?.canonical === 'string' ? rawConfig.site.canonical : fallbackConfig.site.canonical,

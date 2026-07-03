@@ -126,7 +126,8 @@ function ensureLegacyCompatibilityConfig(rootDir: string): string | undefined {
     server: {
       output: '.output',
       path: '.mdsite',
-      repo: legacyConfig.content?.git?.repo || legacyConfig.contentGitRepo || ''
+      repo: legacyConfig.content?.git?.repo || legacyConfig.contentGitRepo || '',
+      gitBranch: legacyConfig.server?.['git-branch'] || 'main'
     },
     site: {
       canonical: legacyConfig.site?.canonical || legacyConfig.siteCanonical || '',

@@ -122,6 +122,7 @@ function ensureLegacyCompatibilityConfig(rootDir: string): string | undefined {
       sourceEdit: legacyConfig.features?.sourceEdit ?? true
     },
     menu: [],
+    footer: [],
     server: {
       output: '.output',
       path: '.mdsite',

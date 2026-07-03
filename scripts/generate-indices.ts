@@ -445,6 +445,166 @@ async function loadMenuConfig(sourceDir: string): Promise<MenuItemType[] | null>
     return null
 }
 
+// ----------------------------------------------------------------------------
+// FOOTER LOGIC
+// ----------------------------------------------------------------------------
+
+export interface FooterLink {
+    path: string
+    title: string
+}
+
+/**
+ * Read the footer array from a candidate mdsite.yml config file.
+ * Returns null when the file is missing, unreadable, or has no footer key.
+ */
+async function tryReadFooterFromConfig(configPath: string): Promise<string[] | null> {
+    if (!await fs.pathExists(configPath)) {
+        return null
+    }
+
+    try {
+        const content = await fs.readFile(configPath, 'utf-8')
+        const parsed = parseYaml(content) as { footer?: unknown } | null
+        if (parsed && Array.isArray(parsed.footer) && parsed.footer.length > 0) {
+            return parsed.footer.filter((item): item is string => typeof item === 'string')
+        }
+    } catch (e) {
+        // Ignore parse errors - they shouldn't abort the whole lookup chain
+    }
+
+    return null
+}
+
+/**
+ * Layered footer lookup. Tries, in order:
+ *   1. MDSITE_CONFIG_PATH env var
+ *   2. <sourceDir>/../mdsite.yml
+ *   3. <sourceDir>/mdsite.yml
+ * Returns the first non-empty footer array, or null if none resolve.
+ */
+async function loadFooterConfig(sourceDir: string): Promise<string[] | null> {
+    const candidates: string[] = []
+    if (process.env.MDSITE_CONFIG_PATH) {
+        candidates.push(process.env.MDSITE_CONFIG_PATH)
+    }
+    candidates.push(path.join(sourceDir, '..', 'mdsite.yml'))
+    candidates.push(path.join(sourceDir, 'mdsite.yml'))
+
+    for (const candidate of candidates) {
+        const footer = await tryReadFooterFromConfig(candidate)
+        if (footer) {
+            return footer
+        }
+    }
+
+    return null
+}
+
+/**
+ * Resolve a raw footer entry to its normalized URL path. Returns null when the
+ * path is empty after resolution.
+ */
+function resolveFooterPath(item: string): string | null {
+    const resolvedPath = resolvePath(item, '/')
+    if (!resolvedPath || resolvedPath === '/') {
+        return null
+    }
+    return normalizeIndexPath(resolvedPath)
+}
+
+/**
+ * Process footer items into a flat list of { path, title } links.
+ * Title falls back to the raw entry when the markdown file is missing or has no H1.
+ */
+async function processFooterItems(items: string[]): Promise<FooterLink[]> {
+    const links: FooterLink[] = []
+
+    for (const item of items) {
+        const normalizedPath = resolveFooterPath(item)
+        if (!normalizedPath) {
+            continue
+        }
+
+        const markdownPath = getMarkdownPath(normalizedPath)
+        let title: string | null = null
+
+        try {
+            if (await fs.pathExists(markdownPath)) {
+                const content = await fs.readFile(markdownPath, 'utf-8')
+                const metadata = extractMarkdownMetadata(content)
+                title = metadata.title
+            }
+        } catch (e) {
+            // Ignore missing files
+        }
+
+        links.push({
+            path: normalizedPath,
+            title: title || item
+        })
+    }
+
+    return links
+}
+
+/**
+ * Build the set of normalized footer paths used to exclude entries from the nav tree.
+ * Returns an empty set when no footer section is configured.
+ */
+async function getFooterExcludedPaths(sourceDir: string): Promise<Set<string>> {
+    const items = await loadFooterConfig(sourceDir)
+    if (!items) {
+        return new Set()
+    }
+
+    const excluded = new Set<string>()
+    for (const item of items) {
+        const normalizedPath = resolveFooterPath(item)
+        if (normalizedPath) {
+            excluded.add(normalizedPath)
+        }
+    }
+    return excluded
+}
+
+/**
+ * Recursively drop any node whose path matches the excluded set. Subtree children
+ * of a dropped node are removed along with the parent.
+ */
+function filterTreeByExcludedPaths(nodes: MinimalTreeNode[], excluded: Set<string>): MinimalTreeNode[] {
+    return nodes
+        .filter(node => !excluded.has(node.path))
+        .map(node => ({
+            ...node,
+            children: node.children ? filterTreeByExcludedPaths(node.children, excluded) : undefined
+        }))
+}
+
+/**
+ * Generate footer links JSON file
+ */
+export async function generateFooterJson() {
+    const domain = getContentDomain()
+    console.log(`📎 Building footer links for: ${domain}`)
+
+    const sourceDir = getSourceDir()
+    const items = await loadFooterConfig(sourceDir)
+    const links = items ? await processFooterItems(items) : []
+
+    const targetDir = getTargetDir()
+    const outputPath = path.join(targetDir, '_footer.json')
+
+    await fs.ensureDir(targetDir)
+    await fs.writeJson(outputPath, links, { spaces: 2 })
+
+    const fileSize = (await fs.stat(outputPath)).size
+    const fileSizeKB = (fileSize / 1024).toFixed(2)
+
+    console.log(`✓ Footer links generated: ${outputPath} (${fileSizeKB} KB)`)
+    console.log(`✓ Total footer links: ${links.length}\n`)
+}
+
 /**
  * Generate navigation JSON file
  */
@@ -466,8 +626,17 @@ export async function generateNavigationJson() {
         console.error('Error building navigation tree:', error)
     }
 
+    // Deduplicate footer entries from the menu tree (if any footer section is configured)
+    const excludedPaths = await getFooterExcludedPaths(sourceDir)
+    if (excludedPaths.size > 0) {
+        tree = filterTreeByExcludedPaths(tree, excludedPaths)
+    }
+
     if (tree.length === 0) {
         tree = await buildFallbackNavigationTree(sourceDir)
+        if (excludedPaths.size > 0) {
+            tree = filterTreeByExcludedPaths(tree, excludedPaths)
+        }
     }
 
     const targetDir = getTargetDir()
@@ -614,6 +783,7 @@ export async function generateSearchIndexJson() {
 export async function buildContentData() {
     await generateNavigationJson()
     await generateSearchIndexJson()
+    await generateFooterJson()
 }
 
 // Run if called directly

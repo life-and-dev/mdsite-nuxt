@@ -12,6 +12,7 @@ export interface MdsiteConfig {
     sourceEdit: boolean
   }
   menu: Array<string | null | Record<string, string | null | Array<any>>>
+  footer: string[]
   server: {
     output: string
     path: string
@@ -201,6 +202,7 @@ function createDefaultMdsiteConfig(siteName: string): MdsiteConfig {
       sourceEdit: true
     },
     menu: [],
+    footer: [],
     server: {
       output: '.output',
       path: '.mdsite',
@@ -233,6 +235,7 @@ function normalizeMdsiteConfig(rawConfig: Record<string, any>, contentDir: strin
     },
     content: contentPath ? { path: contentPath } : fallbackConfig.content,
     menu: Array.isArray(rawConfig.menu) ? rawConfig.menu : fallbackConfig.menu,
+    footer: Array.isArray(rawConfig.footer) ? rawConfig.footer.filter((item): item is string => typeof item === 'string') : [],
     server: {
       output: typeof rawConfig.server?.output === 'string' ? rawConfig.server.output : fallbackConfig.server.output,
       path: typeof rawConfig.server?.path === 'string' ? rawConfig.server.path : fallbackConfig.server.path,

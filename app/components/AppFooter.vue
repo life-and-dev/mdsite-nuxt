@@ -1,5 +1,6 @@
 <template>
   <v-app-bar
+    v-if="hasFooterEntries"
     location="bottom"
     height="56"
     class="app-footer"
@@ -7,30 +8,21 @@
   >
     <v-container class="d-flex justify-center align-center">
       <div class="footer-links">
-        <v-btn
-          v-if="hasAboutPage"
-          :href="aboutLink"
-          variant="text"
-          color="on-surface-appbar"
-          class="footer-link"
-        >
-          About
-        </v-btn>
-
-        <v-divider v-if="hasAboutPage && hasDisclaimerPage" vertical class="mx-2" />
-
-        <v-btn
-          v-if="hasDisclaimerPage"
-          :href="disclaimerLink"
-          variant="text"
-          color="on-surface-appbar"
-          class="footer-link"
-        >
-          Disclaimer
-        </v-btn>
-
-        <v-divider v-if="showEditDivider" vertical class="mx-2" />
-
+        <template v-for="(link, index) in footerHrefs" :key="link.path">
+          <v-btn
+            :href="link.path"
+            variant="text"
+            color="on-surface-appbar"
+            class="footer-link"
+          >
+            {{ link.title }}
+          </v-btn>
+          <v-divider
+            v-if="index < footerHrefs.length - 1 || editUrl"
+            vertical
+            class="mx-2"
+          />
+        </template>
         <v-btn
           v-if="editUrl"
           :href="editUrl"
@@ -49,25 +41,29 @@
 
 <script setup lang="ts">
 import { useSourceEdit } from '~/composables/useSourceEdit';
-import { useSearchIndex } from '~/composables/useSearchIndex'
+import { useFooter } from '~/composables/useFooter'
 import { withBasePath } from '../../utils/base-url'
 
 const appBaseURL = useRuntimeConfig().app.baseURL
 const { getEditUrl } = useSourceEdit()
-const { loadSearchIndex } = useSearchIndex()
-const footerPagePaths = ref<string[]>([])
+const { links: footerLinks, loadFooter } = useFooter()
 
-// Generate links to root content files
-const aboutLink = computed(() => withBasePath('/about', appBaseURL))
-const disclaimerLink = computed(() => withBasePath('/disclaimer', appBaseURL))
 const editUrl = computed(() => getEditUrl())
-const hasAboutPage = computed(() => footerPagePaths.value.includes('/about'))
-const hasDisclaimerPage = computed(() => footerPagePaths.value.includes('/disclaimer'))
-const showEditDivider = computed(() => editUrl.value && (hasAboutPage.value || hasDisclaimerPage.value))
+
+// Render the bar only after the footer JSON has loaded and contains at least
+// one entry. While loading (links === null) or when the array is empty, the
+// whole bar (including the Edit button) is hidden.
+const hasFooterEntries = computed(() =>
+  footerLinks.value !== null && footerLinks.value.length > 0
+)
+
+const footerHrefs = computed(() => (footerLinks.value ?? []).map(link => ({
+  path: withBasePath(link.path, appBaseURL),
+  title: link.title
+})))
 
 onMounted(async () => {
-  const searchIndex = await loadSearchIndex()
-  footerPagePaths.value = searchIndex.map(entry => entry.path)
+  await loadFooter()
 })
 </script>
 

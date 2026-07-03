@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { generateNavigationJson, generateSearchIndexJson } from './generate-indices.js'
+import { generateNavigationJson, generateSearchIndexJson, generateFooterJson } from './generate-indices.js'
 
 describe('generated content indices', () => {
   const originalEnv = { ...process.env }
@@ -232,6 +232,113 @@ describe('generated content indices', () => {
       expect(navigation).toEqual([
         expect.objectContaining({ path: '/guide', title: 'Guide' }),
       ])
+    })
+  })
+
+  describe('mdsite.yml footer lookup', () => {
+    async function readFooter() {
+      return JSON.parse(await fs.readFile(path.join(publicDir, '_footer.json'), 'utf8'))
+    }
+
+    async function readNavigation() {
+      return JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
+    }
+
+    it('generates _footer.json with paths and titles from mdsite.yml footer section', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome home.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'about.md'), '# About\n\nAbout us.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'contacts.md'), '# Contacts\n\nContact us.', 'utf8')
+
+      const mdsitePath = path.join(tempDir, 'mdsite.yml')
+      await fs.writeFile(mdsitePath, [
+        'site:',
+        '  name: Test Site',
+        'footer:',
+        '  - about',
+        '  - contacts',
+        '',
+      ].join('\n'), 'utf8')
+      process.env.MDSITE_CONFIG_PATH = mdsitePath
+
+      await generateFooterJson()
+
+      const footer = await readFooter()
+      expect(footer).toEqual([
+        { path: '/about', title: 'About' },
+        { path: '/contacts', title: 'Contacts' },
+      ])
+    })
+
+    it('returns an empty footer array when no footer section is configured', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'mdsite.yml'), [
+        'site:',
+        '  name: Test Site',
+        '',
+      ].join('\n'), 'utf8')
+      process.env.MDSITE_CONFIG_PATH = path.join(contentDir, 'mdsite.yml')
+
+      await generateFooterJson()
+
+      const footer = await readFooter()
+      expect(footer).toEqual([])
+    })
+
+    it('excludes footer entries from the navigation tree', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome home.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nUseful guide.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'about.md'), '# About\n\nAbout us.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'contacts.md'), '# Contacts\n\nContact us.', 'utf8')
+
+      const mdsitePath = path.join(tempDir, 'mdsite.yml')
+      await fs.writeFile(mdsitePath, [
+        'site:',
+        '  name: Test Site',
+        'menu:',
+        '  - index',
+        '  - guide',
+        'footer:',
+        '  - contacts',
+        '',
+      ].join('\n'), 'utf8')
+      process.env.MDSITE_CONFIG_PATH = mdsitePath
+
+      await generateNavigationJson()
+      await generateFooterJson()
+
+      const navigation = await readNavigation()
+      const paths = navigation.map((n: { path: string }) => n.path)
+      expect(paths).toContain('/')
+      expect(paths).toContain('/guide')
+      expect(paths).not.toContain('/contacts')
+
+      const footer = await readFooter()
+      expect(footer).toEqual([
+        { path: '/contacts', title: 'Contacts' },
+      ])
+    })
+
+    it('excludes footer entries from the fallback navigation tree', async () => {
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome home.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'about.md'), '# About\n\nAbout us.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'contacts.md'), '# Contacts\n\nContact us.', 'utf8')
+
+      const mdsitePath = path.join(tempDir, 'mdsite.yml')
+      await fs.writeFile(mdsitePath, [
+        'site:',
+        '  name: Test Site',
+        'footer: [contacts]',
+        '',
+      ].join('\n'), 'utf8')
+      delete process.env.MDSITE_CONFIG_PATH
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      const paths = navigation.map((n: { path: string }) => n.path)
+      expect(paths).toContain('/')
+      expect(paths).toContain('/about')
+      expect(paths).not.toContain('/contacts')
     })
   })
 })

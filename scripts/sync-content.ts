@@ -22,6 +22,7 @@ const STATIC_FILES = [
 // Debounce timers for JSON regeneration (5 second delay)
 let navigationDebounceTimer: NodeJS.Timeout | null = null
 let searchDebounceTimer: NodeJS.Timeout | null = null
+let footerDebounceTimer: NodeJS.Timeout | null = null
 
 /**
  * Get content domain from environment variable (read at runtime, not import time)
@@ -88,6 +89,26 @@ function regenerateSearchIndex() {
 }
 
 /**
+ * Regenerate footer links JSON with debouncing (5 second delay)
+ */
+function regenerateFooter() {
+    if (footerDebounceTimer) {
+        clearTimeout(footerDebounceTimer)
+    }
+
+    footerDebounceTimer = setTimeout(async () => {
+        console.log('🔄 Regenerating footer links...')
+        try {
+            const { generateFooterJson } = await import('./generate-indices.js')
+            await generateFooterJson()
+        } catch (error) {
+            console.error('❌ Failed to regenerate footer links:', error)
+        }
+        footerDebounceTimer = null
+    }, 5000)
+}
+
+/**
  * Generate navigation and search JSON files (one-time on startup)
  */
 export async function generateJsonFiles() {
@@ -105,6 +126,13 @@ export async function generateJsonFiles() {
         await generateSearchIndexJson()
     } catch (error) {
         console.error('❌ Failed to generate search index:', error)
+    }
+
+    try {
+        const { generateFooterJson } = await import('./generate-indices.js')
+        await generateFooterJson()
+    } catch (error) {
+        console.error('❌ Failed to generate footer links:', error)
     }
 }
 
@@ -198,6 +226,7 @@ export async function startWatcher() {
                 console.log(`📝 Markdown added: ${fileName}`)
                 regenerateNavigation()
                 regenerateSearchIndex()
+                regenerateFooter()
             } else {
                 copyImage(filePath, true, 'added')
             }
@@ -209,6 +238,7 @@ export async function startWatcher() {
                 console.log(`📝 Markdown updated: ${fileName}`)
                 regenerateNavigation()
                 regenerateSearchIndex()
+                regenerateFooter()
             } else {
                 copyImage(filePath, true, 'updated')
             }
@@ -220,6 +250,7 @@ export async function startWatcher() {
                 console.log(`📝 Markdown deleted: ${fileName}`)
                 regenerateNavigation()
                 regenerateSearchIndex()
+                regenerateFooter()
             } else {
                 deleteImage(filePath)
             }

@@ -1,0 +1,117 @@
+/**
+ * Unit tests for the pure `mapSiteConfig` helper extracted from
+ * `useSiteConfig`. The `sourceEdit` Edit-on-GitHub link in `AppBar` and
+ * `AppFooter` is only rendered when `getEditUrl()` produces a URL, which
+ * in turn requires `contentGitRepo` to be populated from `server.repo`.
+ * These tests pin that mapping down so a future refactor cannot regress
+ * it back to the empty-string default.
+ */
+
+import { describe, expect, it } from 'vitest'
+import { mapSiteConfig } from './useSiteConfig'
+
+describe('mapSiteConfig', () => {
+  it('returns safe defaults when siteConfig is undefined', () => {
+    const result = mapSiteConfig(undefined, undefined)
+
+    expect(result).toEqual({
+      siteName: '',
+      siteCanonical: '',
+      contentGitRepo: '',
+      contentGitBranch: 'main',
+      contentGitPath: '.',
+      contentPath: '.',
+      features: {
+        bibleTooltips: false,
+        sourceEdit: false
+      },
+      themeColorLight: '#000000',
+      themeColorDark: '#ffffff'
+    })
+  })
+
+  it('reads site metadata from site.name and site.canonical', () => {
+    const result = mapSiteConfig({
+      site: { name: 'My Site', canonical: 'https://example.test' }
+    }, undefined)
+
+    expect(result.siteName).toBe('My Site')
+    expect(result.siteCanonical).toBe('https://example.test')
+  })
+
+  describe('contentGitRepo (Edit on GitHub source)', () => {
+    it('reads server.repo into contentGitRepo', () => {
+      const result = mapSiteConfig({
+        server: { repo: 'https://github.com/life-and-dev/mdsite' }
+      }, undefined)
+
+      expect(result.contentGitRepo).toBe('https://github.com/life-and-dev/mdsite')
+    })
+
+    it('defaults to empty string when server.repo is missing', () => {
+      const result = mapSiteConfig({ server: {} }, undefined)
+
+      expect(result.contentGitRepo).toBe('')
+    })
+
+    it('defaults to empty string when server is missing entirely', () => {
+      const result = mapSiteConfig({}, undefined)
+
+      expect(result.contentGitRepo).toBe('')
+    })
+  })
+
+  describe('features', () => {
+    it('defaults both feature flags to false when features is missing', () => {
+      const result = mapSiteConfig({}, undefined)
+
+      expect(result.features.bibleTooltips).toBe(false)
+      expect(result.features.sourceEdit).toBe(false)
+    })
+
+    it('reads sourceEdit from features.sourceEdit', () => {
+      const result = mapSiteConfig({
+        features: { sourceEdit: true, bibleTooltips: false }
+      }, undefined)
+
+      expect(result.features.sourceEdit).toBe(true)
+      expect(result.features.bibleTooltips).toBe(false)
+    })
+
+    it('reads bibleTooltips from features.bibleTooltips', () => {
+      const result = mapSiteConfig({
+        features: { sourceEdit: false, bibleTooltips: true }
+      }, undefined)
+
+      expect(result.features.sourceEdit).toBe(false)
+      expect(result.features.bibleTooltips).toBe(true)
+    })
+  })
+
+  describe('theme colors', () => {
+    it('uses the configured light/dark primary colors when present', () => {
+      const result = mapSiteConfig({
+        themes: {
+          light: { colors: { primary: '#111111' } },
+          dark: { colors: { primary: '#eeeeee' } }
+        }
+      }, undefined)
+
+      expect(result.themeColorLight).toBe('#111111')
+      expect(result.themeColorDark).toBe('#eeeeee')
+    })
+
+    it('falls back to defaults when theme colors are missing', () => {
+      const result = mapSiteConfig({ themes: { light: {}, dark: {} } }, undefined)
+
+      expect(result.themeColorLight).toBe('#000000')
+      expect(result.themeColorDark).toBe('#ffffff')
+    })
+  })
+
+  it('passes through the contentPath argument with a dot default', () => {
+    expect(mapSiteConfig({}, '/abs/docs').contentPath).toBe('/abs/docs')
+    expect(mapSiteConfig({}, undefined).contentPath).toBe('.')
+    expect(mapSiteConfig({}, '').contentPath).toBe('.')
+  })
+})

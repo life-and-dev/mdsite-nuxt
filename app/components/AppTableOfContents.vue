@@ -1,11 +1,20 @@
 <template>
-  <div class="toc-sidebar" ref="tocContainer">
+  <!--
+    Guard at the root: the consuming composable's `shouldShowTOC` already
+    requires `tocItems.length >= TOC_MIN_HEADINGS (3)`, so by the time we
+    reach this template a usable TOC is guaranteed. Render nothing otherwise.
+  -->
+  <div
+    v-if="tocItems.length >= 3"
+    class="toc-sidebar"
+    ref="tocContainer"
+  >
     <!-- Header -->
     <h3 v-if="showHeader" class="toc-header">On This Page</h3>
     <v-divider v-if="showHeader" class="mb-2" />
 
     <!-- TOC Items -->
-    <nav v-if="tocItems.length >= 3" class="toc-nav">
+    <nav class="toc-nav">
       <TocItem
         v-for="item in tocItems"
         :key="item.id"
@@ -14,11 +23,6 @@
         @click="handleItemClick(item.id)"
       />
     </nav>
-
-    <!-- Empty state -->
-    <div v-else class="toc-empty">
-      <p class="text-caption text-center">No table of contents available</p>
-    </div>
 
     <!-- Fade gradient for overflow -->
     <div v-if="showFade" class="fade-gradient" />
@@ -120,16 +124,6 @@ watch(() => props.tocItems, () => {
 .toc-nav {
   -ms-overflow-style: none;
   scrollbar-width: none;
-}
-
-.toc-empty {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px 16px;
-  color: rgb(var(--v-theme-on-surface-rail));
-  opacity: 0.6;
 }
 
 .fade-gradient {

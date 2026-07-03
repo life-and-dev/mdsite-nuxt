@@ -4,8 +4,8 @@
     :class="['app-bar', { 'sidebars-visible': sidebarsVisible }]"
     flat
   >
-    <!-- Hamburger menu (always visible) -->
-    <v-tooltip text="Toggle menu" location="bottom">
+    <!-- Hamburger menu (hidden when only one menu item exists) -->
+    <v-tooltip v-if="hasMultipleMenuItems" text="Toggle menu" location="bottom">
       <template v-slot:activator="{ props }">
         <v-app-bar-nav-icon
           v-bind="props"
@@ -51,6 +51,7 @@
 import { generateBreadcrumbs } from '~/composables/useBreadcrumbs'
 import type { BreadcrumbItem } from '~/composables/useBreadcrumbs'
 import { useSourceEdit } from '~/composables/useSourceEdit';
+import { useNavigationTree } from '~/composables/useNavigationTree';
 
 const props = defineProps<{
   sidebarsVisible?: boolean
@@ -63,6 +64,7 @@ const emit = defineEmits<{
 const route = useRoute()
 const { toggleTheme } = useAppTheme()
 const { getEditUrl } = useSourceEdit()
+const { hasMultipleMenuItems } = useNavigationTree()
 
 // Generate breadcrumbs for current route
 const breadcrumbs = ref<BreadcrumbItem[]>([])

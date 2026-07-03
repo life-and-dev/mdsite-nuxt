@@ -5,6 +5,23 @@ export interface TocItem {
   element?: HTMLElement
 }
 
+/** Minimum number of headings required to show the TOC. */
+export const TOC_MIN_HEADINGS = 3
+/** Minimum number of non-empty lines in the rendered content required to show the TOC. */
+export const TOC_MIN_LINES = 40
+
+/**
+ * Pure helper that decides whether the TOC should be shown.
+ * Returns true when the page has enough headings AND enough content lines.
+ * A null lineCount (not yet measured) is treated as "not too short" so the
+ * TOC is not hidden by the line threshold before measurement completes.
+ */
+export function computeShouldShowTOC(headingsCount: number, lineCount: number | null): boolean {
+  if (headingsCount < TOC_MIN_HEADINGS) return false
+  if (lineCount !== null && lineCount < TOC_MIN_LINES) return false
+  return true
+}
+
 /**
  * Generate and manage table of contents from page headings
  */
@@ -12,6 +29,7 @@ export function useTableOfContents() {
   const tocItems = ref<TocItem[]>([])
   const activeId = ref<string>('')
   const observer = ref<IntersectionObserver | null>(null)
+  const lineCount = ref<number | null>(null)
 
   /**
    * Generate TOC from a content container element
@@ -28,14 +46,23 @@ export function useTableOfContents() {
     }
 
     if (!container) {
+      // Reset line count when no container is provided so a stale value
+      // does not gate TOC visibility after the container is unmounted.
+      lineCount.value = null
       return
     }
+
+    // Measure line count of the rendered content (non-empty lines).
+    // Always update this even when there are too few headings so the value
+    // stays in sync with the latest rendered content.
+    const text = container.innerText || ''
+    lineCount.value = text.split('\n').filter(l => l.trim().length > 0).length
 
     // Find only H2 and H3 headings (skip H1 as it's the page title)
     const headings = container.querySelectorAll('article h2, article h3, .content-body h2, .content-body h3')
 
-    if (headings.length < 2) {
-      // Hide TOC if less than 2 headings
+    if (headings.length < TOC_MIN_HEADINGS) {
+      // Hide TOC if fewer than the minimum required headings
       tocItems.value = []
       return
     }
@@ -118,9 +145,9 @@ export function useTableOfContents() {
   }
 
   /**
-   * Check if TOC should be shown (2+ headings)
+   * Check if TOC should be shown based on heading count and content line count.
    */
-  const shouldShowTOC = computed(() => tocItems.value.length >= 2)
+  const shouldShowTOC = computed(() => computeShouldShowTOC(tocItems.value.length, lineCount.value))
 
   /**
    * Clean up observer on unmount
@@ -134,6 +161,7 @@ export function useTableOfContents() {
   return {
     tocItems,
     activeId,
+    lineCount,
     shouldShowTOC,
     generateTOC,
     scrollToHeading

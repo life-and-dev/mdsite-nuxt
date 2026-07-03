@@ -11,6 +11,7 @@
       <div class="desktop-layout">
         <!-- Left Sidebar (Navigation) -->
         <v-navigation-drawer
+          v-if="hasMultipleMenuItems"
           v-model="sidebarsVisible"
           :permanent="!isPrinting"
           absolute
@@ -61,6 +62,7 @@
     <div v-else class="mobile-layout">
       <!-- Mobile Drawer -->
       <v-navigation-drawer
+        v-if="hasMultipleMenuItems"
         v-model="drawerOpen"
         temporary
         location="left"
@@ -118,6 +120,7 @@
 
 <script setup lang="ts">
 import { useTableOfContents } from '~/composables/useTableOfContents'
+import { useNavigationTree } from '~/composables/useNavigationTree'
 
 const { mdAndUp } = useDisplay()
 const route = useRoute()
@@ -126,6 +129,13 @@ const route = useRoute()
 const desktopContentContainer = ref<HTMLElement>()
 const mobileContentContainer = ref<HTMLElement>()
 const { tocItems, activeId: activeHeadingId, shouldShowTOC, generateTOC } = useTableOfContents()
+
+// Navigation state - gates the left drawer and hamburger toggle button.
+// loadTree() is invoked eagerly from the layout so the tree is populated even
+// when the drawer (which would normally host the only other call site) is
+// hidden due to a small menu. Without this, hasMultipleMenuItems stays false
+// forever and the menu never appears.
+const { hasMultipleMenuItems, loadTree } = useNavigationTree()
 
 // Provide TOC generation function to child pages
 provide('generateTOC', () => {
@@ -197,6 +207,11 @@ const onAfterPrint = () => {
 }
 
 onMounted(() => {
+  // Eagerly load the navigation tree so hasMultipleMenuItems can reactively
+  // flip to true once data arrives, even when the menu drawer is initially
+  // hidden because the tree is still empty.
+  loadTree()
+
   if (import.meta.client) {
     window.addEventListener('beforeprint', onBeforePrint)
     window.addEventListener('afterprint', onAfterPrint)

@@ -28,6 +28,33 @@ function getCacheKey(): string {
 }
 
 /**
+ * Recursively count the number of navigable (clickable) menu nodes.
+ * Excludes separators and headers. A parent link with children counts as
+ * one clickable node, plus all of its clickable descendants.
+ */
+export function countClickableMenuItems(nodes: TreeNode[]): number {
+  let count = 0
+  for (const node of nodes) {
+    if (!node.isSeparator && !node.isHeader) {
+      count++
+    }
+    if (node.children?.length) {
+      count += countClickableMenuItems(node.children)
+    }
+  }
+  return count
+}
+
+/**
+ * Decide whether the left navigation drawer should be shown.
+ * Shown only when there is more than one clickable menu item to render
+ * (recursive count across the entire menu tree).
+ */
+export function shouldShowNavigation(nodes: TreeNode[]): boolean {
+  return countClickableMenuItems(nodes) > 1
+}
+
+/**
  * Build hierarchical navigation tree from @nuxt/content collection
  */
 export function useNavigationTree() {
@@ -117,9 +144,18 @@ export function useNavigationTree() {
     return node.parent.children.filter(child => child.path !== nodePath)
   }
 
+  /**
+   * Whether more than one clickable menu item exists in the tree.
+   * Used to gate the left navigation drawer and the hamburger toggle button.
+   */
+  const hasMultipleMenuItems = computed(() =>
+    tree.value !== null && shouldShowNavigation(tree.value.children)
+  )
+
   return {
     tree,
     isLoading,
+    hasMultipleMenuItems,
     loadTree,
     findNodeByPath,
     findPrimaryNodeByPath,

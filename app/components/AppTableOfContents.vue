@@ -5,7 +5,7 @@
     <v-divider v-if="showHeader" class="mb-2" />
 
     <!-- TOC Items -->
-    <nav v-if="tocItems.length >= 2" class="toc-nav">
+    <nav v-if="tocItems.length >= 3" class="toc-nav">
       <TocItem
         v-for="item in tocItems"
         :key="item.id"

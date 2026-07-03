@@ -2,6 +2,30 @@ import fs from 'fs';
 import path from 'path';
 import YAML from 'yaml';
 
+/**
+ * Recursive shape of a single `mdsite.yml` `menu:` entry.
+ *
+ * - `string`        → flat link to a markdown slug
+ *                     (e.g. `- genesis`, `- resurrections`)
+ * - `null`          → visual separator (`===` in YAML)
+ * - `Record<string, MdsiteMenuValue>` → group: object whose keys are group
+ *                     labels (e.g. `"Members of the Trinity":`) and whose
+ *                     values are `MdsiteMenuValue` items
+ * - `MdsiteMenuValue` (the value side of a group) can be:
+ *     - `string`         → alias link with custom title
+ *                          (e.g. `"Job": https://...`, `"Homepage": index`)
+ *     - `null`           → group label only (renders as a heading, no link)
+ *     - `MdsiteMenuItem[]` → nested submenu (recursive)
+ *
+ * Keeping this a `type` alias (not an `interface`) and avoiding `any` lets
+ * Nuxt's runtime-config type generator infer `runtimeConfig.public.siteConfig`
+ * without collapsing `menu` to `{}[]`. See `nuxt.config.ts` for the cast
+ * history this replaces.
+ */
+export type MdsiteMenuItem = string | null | MdsiteMenuGroup
+export type MdsiteMenuGroup = { [key: string]: MdsiteMenuValue }
+export type MdsiteMenuValue = string | null | MdsiteMenuItem[]
+
 export interface MdsiteConfig {
   content?: {
     path?: string
@@ -11,7 +35,7 @@ export interface MdsiteConfig {
     bibleTooltips: boolean
     sourceEdit: boolean
   }
-  menu: Array<string | null | Record<string, string | null | Array<any>>>
+  menu: MdsiteMenuItem[]
   footer: string[]
   server: {
     output: string

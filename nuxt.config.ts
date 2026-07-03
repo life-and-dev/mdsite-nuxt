@@ -18,7 +18,25 @@ export default defineNuxtConfig({
     public: {
       contentDomain: path.basename(mdsite.contentDir),
       contentPath: mdsite.contentDir,
-      siteConfig
+      // `mdsite.config` is a valid `MdsiteConfig` at runtime, but
+      // Nuxt's runtime-config type generator collapses every complex
+      // field of `siteConfig` to a degenerate shape — `menu` becomes
+      // `Array<{}>` (regardless of whether the source type is recursive
+      // or contains `Array<any>`) and `footer` becomes `Array<any>`.
+      // We verified this by:
+      //   1. Tightening `MdsiteConfig.menu` to a proper recursive
+      //      `MdsiteMenuItem` (no `any`) and clearing `.nuxt` cache:
+      //      the generated `menu` was still `Array<{}>`.
+      //   2. Trying `declare module 'nuxt/schema'` augmentations of
+      //      `PublicRuntimeConfig.siteConfig`: the augmentation
+      //      *intersects* with the broken generated type rather than
+      //      overriding it, producing an even narrower target.
+      // Since the runtime value is unchanged, `as any` is the most
+      // honest pragmatic escape hatch. The recursive `MdsiteMenuItem`
+      // type is still useful: it gives the rest of the codebase
+      // (notably `scripts/generate-indices.ts`) a single source of
+      // truth and proper types.
+      siteConfig: siteConfig as any
     }
   },
 

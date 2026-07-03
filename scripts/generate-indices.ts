@@ -4,6 +4,7 @@ import fs from 'fs-extra'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { parse as parseYaml } from 'yaml'
+import type { MdsiteMenuItem } from '../utils/mdsite-config'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -108,8 +109,10 @@ export interface MinimalTreeNode {
     isPrimary?: boolean
 }
 
-type MenuItemType = string | { [key: string]: string | null | MenuItemType[] } | null
-
+// `MdsiteMenuItem` is imported from `~/utils/mdsite-config` (see top of file).
+// It is the same recursive shape that was previously defined locally as
+// `MdsiteMenuItem`. Single source of truth lives in `utils/mdsite-config.ts`
+// so the Nuxt runtime-config type generator can infer it correctly.
 /**
  * Normalize URL path so a trailing /index resolves to its parent.
  * Mirrors filePathToUrlPath behavior so menu paths match content routes.
@@ -161,7 +164,7 @@ function resolvePath(menuPath: string, contextPath: string): string {
  * Process menu items recursively and build minimal tree structure
  */
 async function processMenuItems(
-    items: MenuItemType[],
+    items: MdsiteMenuItem[],
     contextPath: string,
     order: number = 0
 ): Promise<{ nodes: MinimalTreeNode[], nextOrder: number }> {
@@ -371,14 +374,14 @@ async function buildFallbackNavigationTree(sourceDir: string): Promise<MinimalTr
  * Load the menu array from a candidate config file (legacy _menu.yml/yaml or mdsite.yml).
  * Returns null if the file is missing, unreadable, has no menu key, or has an empty menu.
  */
-async function tryReadMenuFromConfig(configPath: string): Promise<MenuItemType[] | null> {
+async function tryReadMenuFromConfig(configPath: string): Promise<MdsiteMenuItem[] | null> {
     if (!await fs.pathExists(configPath)) {
         return null
     }
 
     try {
         const content = await fs.readFile(configPath, 'utf-8')
-        const parsed = parseYaml(content) as { menu?: MenuItemType[] } | null
+        const parsed = parseYaml(content) as { menu?: MdsiteMenuItem[] } | null
         if (parsed && Array.isArray(parsed.menu) && parsed.menu.length > 0) {
             return parsed.menu
         }
@@ -393,14 +396,14 @@ async function tryReadMenuFromConfig(configPath: string): Promise<MenuItemType[]
  * Try to read menu items from a plain (non-wrapped) legacy _menu.yml/yaml file.
  * Returns null if the file is missing, unreadable, or doesn't contain a non-empty array.
  */
-async function tryReadLegacyMenuFile(menuPath: string): Promise<MenuItemType[] | null> {
+async function tryReadLegacyMenuFile(menuPath: string): Promise<MdsiteMenuItem[] | null> {
     if (!await fs.pathExists(menuPath)) {
         return null
     }
 
     try {
         const content = await fs.readFile(menuPath, 'utf-8')
-        const parsed = parseYaml(content) as MenuItemType[] | null
+        const parsed = parseYaml(content) as MdsiteMenuItem[] | null
         if (Array.isArray(parsed) && parsed.length > 0) {
             return parsed
         }
@@ -420,7 +423,7 @@ async function tryReadLegacyMenuFile(menuPath: string): Promise<MenuItemType[] |
  *   5. <sourceDir>/mdsite.yml
  * Returns the first non-empty menu array, or null if none resolve to a menu.
  */
-async function loadMenuConfig(sourceDir: string): Promise<MenuItemType[] | null> {
+async function loadMenuConfig(sourceDir: string): Promise<MdsiteMenuItem[] | null> {
     const candidates: { path: string, isLegacy: boolean }[] = [
         { path: path.join(sourceDir, '_menu.yml'), isLegacy: true },
         { path: path.join(sourceDir, '_menu.yaml'), isLegacy: true }

@@ -8,7 +8,7 @@ export interface TocItem {
 /** Minimum number of headings required to show the TOC. */
 export const TOC_MIN_HEADINGS = 3
 /** Minimum number of non-empty lines in the rendered content required to show the TOC. */
-export const TOC_MIN_LINES = 40
+export const TOC_MIN_LINES = 15
 
 /**
  * Pure helper that decides whether the TOC should be shown.

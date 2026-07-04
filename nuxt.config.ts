@@ -9,6 +9,17 @@ import { loadMdsiteConfigSync } from './utils/mdsite-config'
 const mdsite = loadMdsiteConfigSync()
 const siteConfig = mdsite.config
 const appBaseURL = process.env.NUXT_APP_BASE_URL || '/'
+// The git repo root, used by `useSourceEdit` to compute the
+// repo-relative path to a content file (so the Edit-on-GitHub URL
+// points at `…/blob/<branch>/<subdir>/<file>.md` rather than a
+// cwd-relative or absolute filesystem path). We default to the
+// directory containing `mdsite.yml` because that is the conventional
+// git root for an mdsite content dir; falling back to the content
+// dir itself covers the case where `mdsite.yml` is missing (legacy
+// `content.config.yml` layouts loaded through `renderer-hooks`).
+const contentGitPath = mdsite.configPath
+  ? path.dirname(mdsite.configPath)
+  : mdsite.contentDir
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -18,6 +29,7 @@ export default defineNuxtConfig({
     public: {
       contentDomain: path.basename(mdsite.contentDir),
       contentPath: mdsite.contentDir,
+      contentGitPath,
       // `mdsite.config` is a valid `MdsiteConfig` at runtime, but
       // Nuxt's runtime-config type generator collapses every complex
       // field of `siteConfig` to a degenerate shape — `menu` becomes

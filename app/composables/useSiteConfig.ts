@@ -44,17 +44,26 @@ export interface SiteConfig {
  * field mapping (notably `contentGitRepo` ← `server.repo`, which is what
  * powers the Edit on GitHub link in `AppBar` and `AppFooter`) can be unit
  * tested independently of the Nuxt runtime.
+ *
+ * `contentGitPath` must be an absolute path when supplied (the renderer
+ * sets it from `path.dirname(mdsite.configPath)` in `nuxt.config.ts`).
+ * Leaving it undefined preserves the historical cwd-relative `'.'`
+ * default, which is only correct when the renderer's cwd equals the git
+ * repo root — pass an absolute path to make `useSourceEdit`'s
+ * `relative(contentGitPath, contentPath)` computation deterministic
+ * across server and client and avoid hydration mismatches.
  */
 export function mapSiteConfig(
   siteConfig: RawSiteConfig | undefined,
   contentPath: string | undefined,
+  contentGitPath: string | undefined = '.',
 ): SiteConfig {
   return {
     siteName: siteConfig?.site?.name || '',
     siteCanonical: siteConfig?.site?.canonical || '',
     contentGitRepo: siteConfig?.server?.repo || '',
     contentGitBranch: siteConfig?.server?.gitBranch || 'main',
-    contentGitPath: '.',
+    contentGitPath: contentGitPath || '.',
     contentPath: contentPath || '.',
     features: {
       bibleTooltips: siteConfig?.features?.bibleTooltips ?? false,
@@ -72,5 +81,9 @@ export function useSiteConfig(): SiteConfig {
   const config = useRuntimeConfig()
   const siteConfig = config.public.siteConfig as RawSiteConfig | undefined
 
-  return mapSiteConfig(siteConfig, config.public.contentPath)
+  return mapSiteConfig(
+    siteConfig,
+    config.public.contentPath,
+    config.public.contentGitPath as string | undefined
+  )
 }

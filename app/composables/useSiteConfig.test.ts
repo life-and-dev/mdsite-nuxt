@@ -139,4 +139,28 @@ describe('mapSiteConfig', () => {
     expect(mapSiteConfig({}, undefined).contentPath).toBe('.')
     expect(mapSiteConfig({}, '').contentPath).toBe('.')
   })
+
+  describe('contentGitPath (Edit on GitHub source)', () => {
+    it('defaults to "." when contentGitPath is undefined', () => {
+      // Preserves the historical cwd-relative fallback so existing
+      // callers/tests that omit the third arg keep working.
+      expect(mapSiteConfig({}, undefined).contentGitPath).toBe('.')
+      expect(mapSiteConfig({}, undefined, undefined).contentGitPath).toBe('.')
+    })
+
+    it('defaults to "." when contentGitPath is an empty string', () => {
+      // Empty string is treated as missing so an absent
+      // runtimeConfig.public.contentGitPath falls back cleanly.
+      expect(mapSiteConfig({}, undefined, '').contentGitPath).toBe('.')
+    })
+
+    it('passes an absolute contentGitPath through unchanged', () => {
+      // The renderer supplies `path.dirname(mdsite.configPath)` here so
+      // `relative(contentGitPath, contentPath)` is cwd-independent and
+      // identical on server and client (no hydration mismatch).
+      expect(
+        mapSiteConfig({}, '/home/user/site/docs', '/home/user/site').contentGitPath
+      ).toBe('/home/user/site')
+    })
+  })
 })

@@ -186,7 +186,7 @@ export default defineNuxtConfig({
     },
 
     'build:before': async () => {
-      if (process.argv.includes('prepare') || !mdsite.configPath || process.env.MDSITE_RENDERER_ORCHESTRATED === '1') {
+      if (process.argv.includes('prepare') || !mdsite.configPath) {
         return
       }
 

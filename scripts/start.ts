@@ -39,7 +39,6 @@ if (nuxtCommand.startsWith('dev')) {
     await runSetupHooks(nuxtCommand, rootDir, { configPath: configArg })
 } else {
     prepareRendererRuntime(rootDir, { configPath: configArg })
-    process.env.MDSITE_RENDERER_ORCHESTRATED = '1'
 }
 
 console.log(`✨ Starting Nuxt ${nuxtCommand.toUpperCase()}...`)

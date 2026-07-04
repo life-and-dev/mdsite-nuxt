@@ -70,7 +70,6 @@ export async function runSetupHooks(mode: 'setup' | 'build' | 'generate' | 'dev'
       await fs.promises.rm(path.join(rootDir, '.data'), { recursive: true, force: true })
     }
     await generateDevManifestAssets(runtime.config)
-    process.env.MDSITE_RENDERER_ORCHESTRATED = '1'
     await startWatcher()
     return runtime
   }
@@ -79,7 +78,6 @@ export async function runSetupHooks(mode: 'setup' | 'build' | 'generate' | 'dev'
   console.log(`\n🔨 Generating navigation and search index...`)
   await buildContentData()
   await generateFaviconAssets(runtime.config)
-  process.env.MDSITE_RENDERER_ORCHESTRATED = '1'
 
   return runtime
 }

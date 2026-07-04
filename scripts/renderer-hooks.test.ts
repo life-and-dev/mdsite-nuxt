@@ -261,7 +261,6 @@ describe('renderer hooks orchestration', () => {
         }),
       }),
     }))
-    expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
     expect(runtime.contentDir).toBe('/renderer/docs')
   })
 
@@ -290,7 +289,6 @@ describe('renderer hooks orchestration', () => {
     }))
     expect(syncContentMock.mock.invocationCallOrder[0]).toBeLessThan(buildContentDataMock.mock.invocationCallOrder[0])
     expect(buildContentDataMock.mock.invocationCallOrder[0]).toBeLessThan(generateFaviconsMock.mock.invocationCallOrder[0])
-    expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
   })
 
   it('runs setup mode through the same non-dev orchestration path as build and generate', async () => {
@@ -309,7 +307,6 @@ describe('renderer hooks orchestration', () => {
     }))
     expect(startWatcherMock).not.toHaveBeenCalled()
     expect(rmMock).not.toHaveBeenCalled()
-    expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
   })
 
   it('marks orchestration complete for build mode on the same shared non-dev path', async () => {
@@ -319,7 +316,6 @@ describe('renderer hooks orchestration', () => {
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
     expect(generateFaviconsMock).toHaveBeenCalledTimes(1)
     expect(startWatcherMock).not.toHaveBeenCalled()
-    expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
   })
 
   it('runs build fallback hooks without publishing favicon assets when generation reports no output', async () => {
@@ -341,6 +337,5 @@ describe('renderer hooks orchestration', () => {
     expect(buildContentDataMock).toHaveBeenCalledTimes(1)
     expect(generateFaviconsMock).toHaveBeenCalledTimes(1)
     expect(generateWebManifestMock).not.toHaveBeenCalled()
-    expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
   })
 })

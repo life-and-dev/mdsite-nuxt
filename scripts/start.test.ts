@@ -109,7 +109,6 @@ describe('renderer start wrapper', () => {
       configPath: 'config/site.yml',
     })
     expect(runSetupHooksMock).not.toHaveBeenCalled()
-    expect(process.env.MDSITE_RENDERER_ORCHESTRATED).toBe('1')
     expect(spawnMock).toHaveBeenCalledWith('npx', ['nuxt', 'preview'], {
       cwd: rootDir,
       env: process.env,

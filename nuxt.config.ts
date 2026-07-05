@@ -9,17 +9,17 @@ import { loadMdsiteConfigSync } from './utils/mdsite-config'
 const mdsite = loadMdsiteConfigSync()
 const siteConfig = mdsite.config
 const appBaseURL = process.env.NUXT_APP_BASE_URL || '/'
-// The git repo root, used by `useSourceEdit` to compute the
-// repo-relative path to a content file (so the Edit-on-GitHub URL
-// points at `…/blob/<branch>/<subdir>/<file>.md` rather than a
-// cwd-relative or absolute filesystem path). We default to the
-// directory containing `mdsite.yml` because that is the conventional
-// git root for an mdsite content dir; falling back to the content
-// dir itself covers the case where `mdsite.yml` is missing (legacy
-// `content.config.yml` layouts loaded through `renderer-hooks`).
-const contentGitPath = mdsite.configPath
-  ? path.dirname(mdsite.configPath)
-  : mdsite.contentDir
+
+// mdsite is a static site generator. SSR is only needed at build time so
+// `nuxi generate` can pre-render every route to HTML. In `dev` and
+// `preview` mode SSR uses a per-request fork worker that pulls the full
+// Nuxt + Vuetify + @nuxt/content + mermaid + sharp pipeline and OOMs
+// (Worker terminated … JS heap out of memory) on memory-constrained
+// hosts. Keep SSR on for build/generate, off for dev/preview so the
+// dev server renders client-side only and `mdsite generate` still
+// produces per-route static HTML.
+const isSsrNuxtCommand = process.argv.includes('build') || process.argv.includes('generate')
+const ssrEnabled = isSsrNuxtCommand
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -29,7 +29,6 @@ export default defineNuxtConfig({
     public: {
       contentDomain: path.basename(mdsite.contentDir),
       contentPath: mdsite.contentDir,
-      contentGitPath,
       // `mdsite.config` is a valid `MdsiteConfig` at runtime, but
       // Nuxt's runtime-config type generator collapses every complex
       // field of `siteConfig` to a degenerate shape — `menu` becomes
@@ -61,7 +60,7 @@ export default defineNuxtConfig({
     preset: 'static'  // Pure static preset - no SPA fallbacks
   },
 
-  ssr: true,
+  ssr: ssrEnabled,
 
   css: [
     '~/assets/css/markdown.css',

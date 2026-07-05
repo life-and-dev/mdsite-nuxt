@@ -4,7 +4,7 @@ import fs from 'fs-extra'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { parse as parseYaml } from 'yaml'
-import type { MdsiteMenuItem } from '../utils/mdsite-config'
+import type { MdsiteFooterItem, MdsiteMenuItem } from '../utils/mdsite-config'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -452,25 +452,60 @@ async function loadMenuConfig(sourceDir: string): Promise<MdsiteMenuItem[] | nul
 // FOOTER LOGIC
 // ----------------------------------------------------------------------------
 
+/**
+ * Runtime-validated footer entry. `null` is rendered as a vertical separator
+ * in the bar; external URLs keep their raw `path` and render in a new tab;
+ * internal links use the normalized path with the H1 title (or custom title).
+ */
 export interface FooterLink {
     path: string
     title: string
+    type: 'link' | 'separator'
+    isExternal: boolean
+}
+
+/**
+ * Same filter the CLI uses, but expressed against `MdsiteFooterItem`. Keeps
+ * CLI and renderer parsers in lockstep so both drop malformed entries the
+ * same way.
+ */
+function isValidFooterItem(item: unknown): item is MdsiteFooterItem {
+    if (item === null) return true
+    if (typeof item === 'string') return item.trim().length > 0
+    if (typeof item === 'object') {
+        const keys = Object.keys(item as Record<string, unknown>)
+        if (keys.length !== 1) return false
+        const value = (item as Record<string, unknown>)[keys[0]]
+        return value === null || typeof value === 'string'
+    }
+    return false
+}
+
+/**
+ * True when the string is an absolute http(s) URL. Used to keep external
+ * links out of the menu-exclusion set (no markdown file to exclude) and to
+ * open them in a new tab in the footer.
+ */
+function isExternalUrl(value: string): boolean {
+    return value.startsWith('http://') || value.startsWith('https://')
 }
 
 /**
  * Read the footer array from a candidate mdsite.yml config file.
  * Returns null when the file is missing, unreadable, or has no footer key.
+ * Footer lives under `features.footer` in mdsite.yml.
  */
-async function tryReadFooterFromConfig(configPath: string): Promise<string[] | null> {
+async function tryReadFooterFromConfig(configPath: string): Promise<MdsiteFooterItem[] | null> {
     if (!await fs.pathExists(configPath)) {
         return null
     }
 
     try {
         const content = await fs.readFile(configPath, 'utf-8')
-        const parsed = parseYaml(content) as { footer?: unknown } | null
-        if (parsed && Array.isArray(parsed.footer) && parsed.footer.length > 0) {
-            return parsed.footer.filter((item): item is string => typeof item === 'string')
+        const parsed = parseYaml(content) as { features?: { footer?: unknown } } | null
+        const footerItems = parsed?.features?.footer
+        if (parsed && Array.isArray(footerItems) && footerItems.length > 0) {
+            return footerItems.filter(isValidFooterItem)
         }
     } catch (e) {
         // Ignore parse errors - they shouldn't abort the whole lookup chain
@@ -486,7 +521,7 @@ async function tryReadFooterFromConfig(configPath: string): Promise<string[] | n
  *   3. <sourceDir>/mdsite.yml
  * Returns the first non-empty footer array, or null if none resolve.
  */
-async function loadFooterConfig(sourceDir: string): Promise<string[] | null> {
+async function loadFooterConfig(sourceDir: string): Promise<MdsiteFooterItem[] | null> {
     const candidates: string[] = []
     if (process.env.MDSITE_CONFIG_PATH) {
         candidates.push(process.env.MDSITE_CONFIG_PATH)
@@ -505,10 +540,13 @@ async function loadFooterConfig(sourceDir: string): Promise<string[] | null> {
 }
 
 /**
- * Resolve a raw footer entry to its normalized URL path. Returns null when the
- * path is empty after resolution.
+ * Resolve a raw footer entry to its normalized URL path. Returns null when
+ * the path is empty after resolution or when the entry is not a usable string.
  */
 function resolveFooterPath(item: string): string | null {
+    if (isExternalUrl(item)) {
+        return null
+    }
     const resolvedPath = resolvePath(item, '/')
     if (!resolvedPath || resolvedPath === '/') {
         return null
@@ -517,34 +555,112 @@ function resolveFooterPath(item: string): string | null {
 }
 
 /**
- * Process footer items into a flat list of { path, title } links.
- * Title falls back to the raw entry when the markdown file is missing or has no H1.
+ * Pull the normalized internal path out of a footer item, if any. Returns
+ * null for external URLs and `null`/empty items so they never get added to
+ * the menu-exclusion set.
  */
-async function processFooterItems(items: string[]): Promise<FooterLink[]> {
+function extractInternalPath(item: MdsiteFooterItem): string | null {
+    if (typeof item === 'string') {
+        return resolveFooterPath(item)
+    }
+    if (item && typeof item === 'object') {
+        const keys = Object.keys(item)
+        if (keys.length === 1) {
+            const value = item[keys[0]]
+            if (typeof value === 'string') {
+                return resolveFooterPath(value)
+            }
+        }
+    }
+    return null
+}
+
+/**
+ * Process footer items into a flat list of FooterLink entries. Supports:
+ *   - `null` → separator
+ *   - string (file name) → internal link, title from H1
+ *   - `{ title: path }` → internal link with custom title
+ *   - `{ title: https://... }` → external link, opens in a new tab
+ * Title falls back to the raw entry / key when the markdown file is missing
+ * or has no H1.
+ */
+async function processFooterItems(items: MdsiteFooterItem[]): Promise<FooterLink[]> {
     const links: FooterLink[] = []
 
     for (const item of items) {
-        const normalizedPath = resolveFooterPath(item)
-        if (!normalizedPath) {
+        if (item === null) {
+            links.push({
+                path: '',
+                title: '',
+                type: 'separator',
+                isExternal: false
+            })
             continue
         }
 
-        const markdownPath = getMarkdownPath(normalizedPath)
-        let title: string | null = null
-
-        try {
-            if (await fs.pathExists(markdownPath)) {
-                const content = await fs.readFile(markdownPath, 'utf-8')
-                const metadata = extractMarkdownMetadata(content)
-                title = metadata.title
+        if (typeof item === 'string') {
+            const normalizedPath = resolveFooterPath(item)
+            if (!normalizedPath) {
+                continue
             }
-        } catch (e) {
-            // Ignore missing files
+            const title = await readH1Title(normalizedPath) ?? item
+            links.push({
+                path: normalizedPath,
+                title,
+                type: 'link',
+                isExternal: false
+            })
+            continue
         }
 
+        // Object form: { title: path-or-url }
+        const keys = Object.keys(item)
+        if (keys.length !== 1) continue
+        const displayTitle = keys[0]
+        const value = item[displayTitle]
+
+        if (value === null) {
+            links.push({
+                path: '',
+                title: displayTitle,
+                type: 'separator',
+                isExternal: false
+            })
+            continue
+        }
+
+        if (typeof value !== 'string') continue
+
+        if (isExternalUrl(value)) {
+            links.push({
+                path: value,
+                title: displayTitle,
+                type: 'link',
+                isExternal: true
+            })
+            continue
+        }
+
+        const normalizedPath = resolveFooterPath(value)
+        if (!normalizedPath) {
+            // Custom title pointing at a non-existent page — still render it
+            // using the raw value as the title so the user sees their label.
+            links.push({
+                path: value,
+                title: displayTitle,
+                type: 'link',
+                isExternal: false
+            })
+            continue
+        }
+
+        // Object form always wins for the title, mirroring how the `menu`
+        // parser treats custom labels as overrides of the file's H1.
         links.push({
             path: normalizedPath,
-            title: title || item
+            title: displayTitle,
+            type: 'link',
+            isExternal: false
         })
     }
 
@@ -552,8 +668,26 @@ async function processFooterItems(items: string[]): Promise<FooterLink[]> {
 }
 
 /**
- * Build the set of normalized footer paths used to exclude entries from the nav tree.
- * Returns an empty set when no footer section is configured.
+ * Read the H1 from a markdown file at the given normalized path. Returns
+ * null when the file is missing or has no H1 heading.
+ */
+async function readH1Title(normalizedPath: string): Promise<string | null> {
+    const markdownPath = getMarkdownPath(normalizedPath)
+    try {
+        if (await fs.pathExists(markdownPath)) {
+            const content = await fs.readFile(markdownPath, 'utf-8')
+            const metadata = extractMarkdownMetadata(content)
+            return metadata.title
+        }
+    } catch (e) {
+        // Ignore missing files
+    }
+    return null
+}
+
+/**
+ * Build the set of normalized footer paths used to exclude entries from the
+ * nav tree. Returns an empty set when no footer section is configured.
  */
 async function getFooterExcludedPaths(sourceDir: string): Promise<Set<string>> {
     const items = await loadFooterConfig(sourceDir)
@@ -563,7 +697,7 @@ async function getFooterExcludedPaths(sourceDir: string): Promise<Set<string>> {
 
     const excluded = new Set<string>()
     for (const item of items) {
-        const normalizedPath = resolveFooterPath(item)
+        const normalizedPath = extractInternalPath(item)
         if (normalizedPath) {
             excluded.add(normalizedPath)
         }

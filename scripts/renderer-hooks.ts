@@ -1,6 +1,5 @@
 import fs from 'fs'
 import path from 'path'
-import YAML from 'yaml'
 
 import { buildContentData } from './generate-indices.js'
 import { generateFavicons, generateWebManifest } from './generate-favicons.js'
@@ -18,14 +17,10 @@ export function prepareRendererRuntime(rootDir: string, options: {
   configPath?: string
   contentPath?: string
 } = {}): RendererRuntime {
-  let configPath = resolveMdsiteConfigPath({
+  const configPath = resolveMdsiteConfigPath({
     configPath: options.configPath,
     contentPath: options.contentPath ?? process.env.NUXT_CONTENT_PATH
   })
-
-  if (!configPath) {
-    configPath = ensureLegacyCompatibilityConfig(rootDir)
-  }
 
   if (!configPath) {
     console.error('❌ No mdsite.yml configuration found. Set MDSITE_CONFIG_PATH or pass a mdsite.yml path.')
@@ -100,46 +95,4 @@ async function generateFaviconAssets(config: MdsiteConfig): Promise<void> {
 
 async function generateDevManifestAssets(config: MdsiteConfig): Promise<void> {
   await generateWebManifest({ name: config.site.name, themes: config.themes })
-}
-
-function ensureLegacyCompatibilityConfig(rootDir: string): string | undefined {
-  const legacyConfigPath = path.join(rootDir, 'content.config.yml')
-
-  if (!fs.existsSync(legacyConfigPath) || !fs.statSync(legacyConfigPath).isFile()) {
-    return undefined
-  }
-
-  const legacyConfig = YAML.parse(fs.readFileSync(legacyConfigPath, 'utf8')) ?? {}
-  const legacyContentPath = legacyConfig.content?.path || legacyConfig.content?.git?.path || legacyConfig.contentPath || 'docs'
-  const contentDir = path.resolve(rootDir, legacyContentPath)
-  const compatibilityConfigPath = path.join(rootDir, '.mdsite-compat.yml')
-  const compatibilityConfig = {
-    favicon: '',
-    features: {
-      bibleTooltips: legacyConfig.features?.bibleTooltips ?? true,
-      sourceEdit: legacyConfig.features?.sourceEdit ?? true
-    },
-    menu: [],
-    footer: [],
-    server: {
-      output: '.output',
-      path: '.mdsite',
-      repo: legacyConfig.content?.git?.repo || legacyConfig.contentGitRepo || '',
-      gitBranch: legacyConfig.server?.['git-branch'] || 'main'
-    },
-    site: {
-      canonical: legacyConfig.site?.canonical || legacyConfig.siteCanonical || '',
-      name: legacyConfig.site?.name || legacyConfig.siteName || path.basename(contentDir) || 'Site'
-    },
-    themes: legacyConfig.themes || {}
-  }
-
-  fs.writeFileSync(compatibilityConfigPath, YAML.stringify(compatibilityConfig), 'utf8')
-  process.env.NUXT_CONTENT_PATH = contentDir
-  process.env.CONTENT_DIR = contentDir
-  process.env.MDSITE_CONFIG_PATH = compatibilityConfigPath
-
-  console.warn(`⚠️ Using legacy compatibility fallback from ${legacyConfigPath}`)
-
-  return compatibilityConfigPath
 }

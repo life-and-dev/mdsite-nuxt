@@ -8,48 +8,28 @@ const {
   generateFaviconsMock,
   generateWebManifestMock,
   loadMdsiteConfigSyncMock,
-  parseYamlMock,
-  readFileSyncMock,
   resolveMdsiteConfigPathMock,
   rmMock,
   startWatcherMock,
-  statSyncMock,
-  stringifyYamlMock,
   syncContentMock,
-  writeFileSyncMock,
 } = vi.hoisted(() => ({
   buildContentDataMock: vi.fn(),
   existsSyncMock: vi.fn(),
   generateFaviconsMock: vi.fn(),
   generateWebManifestMock: vi.fn(),
   loadMdsiteConfigSyncMock: vi.fn(),
-  parseYamlMock: vi.fn(),
-  readFileSyncMock: vi.fn(),
   resolveMdsiteConfigPathMock: vi.fn(),
   rmMock: vi.fn(),
   startWatcherMock: vi.fn(),
-  statSyncMock: vi.fn(),
-  stringifyYamlMock: vi.fn(),
   syncContentMock: vi.fn(),
-  writeFileSyncMock: vi.fn(),
 }))
 
 vi.mock('fs', () => ({
   default: {
     existsSync: existsSyncMock,
-    statSync: statSyncMock,
-    readFileSync: readFileSyncMock,
-    writeFileSync: writeFileSyncMock,
     promises: {
       rm: rmMock,
     },
-  },
-}))
-
-vi.mock('yaml', () => ({
-  default: {
-    parse: parseYamlMock,
-    stringify: stringifyYamlMock,
   },
 }))
 
@@ -105,8 +85,6 @@ describe('renderer hooks orchestration', () => {
       contentDir: '/renderer/docs',
     })
     existsSyncMock.mockImplementation((target: string) => target === '/renderer/docs')
-    statSyncMock.mockReturnValue({ isFile: () => true })
-    stringifyYamlMock.mockReturnValue('compat-config')
     generateFaviconsMock.mockResolvedValue(true)
     buildContentDataMock.mockResolvedValue(undefined)
     generateWebManifestMock.mockResolvedValue(undefined)
@@ -144,70 +122,6 @@ describe('renderer hooks orchestration', () => {
     expect(process.env.NUXT_CONTENT_PATH).toBe('/renderer/docs')
     expect(process.env.CONTENT_DIR).toBe('/renderer/docs')
     expect(process.env.MDSITE_CONFIG_PATH).toBe('/renderer/mdsite.yml')
-  })
-
-  it('falls back to the legacy compatibility config when no explicit mdsite config resolves', () => {
-    resolveMdsiteConfigPathMock.mockReturnValue(undefined)
-    existsSyncMock.mockImplementation((target: string) => (
-      target === '/renderer/content.config.yml' || target === path.join('/renderer', 'legacy-docs')
-    ))
-    parseYamlMock.mockReturnValue({
-      content: {
-        path: 'legacy-docs',
-      },
-      siteName: 'Legacy Docs',
-    })
-    loadMdsiteConfigSyncMock.mockReturnValue({
-      config: { site: { name: 'Legacy Docs' } },
-      configPath: '/renderer/.mdsite-compat.yml',
-      contentDir: path.join('/renderer', 'legacy-docs'),
-    })
-
-    const runtime = prepareRendererRuntime('/renderer')
-
-    expect(readFileSyncMock).toHaveBeenCalledWith('/renderer/content.config.yml', 'utf8')
-    expect(writeFileSyncMock).toHaveBeenCalledWith('/renderer/.mdsite-compat.yml', 'compat-config', 'utf8')
-    expect(loadMdsiteConfigSyncMock).toHaveBeenCalledWith({
-      configPath: '/renderer/.mdsite-compat.yml',
-      contentPath: path.join('/renderer', 'legacy-docs'),
-    })
-    expect(runtime.configPath).toBe('/renderer/.mdsite-compat.yml')
-    expect(process.env.MDSITE_CONFIG_PATH).toBe('/renderer/.mdsite-compat.yml')
-    expect(process.env.NUXT_CONTENT_PATH).toBe(path.join('/renderer', 'legacy-docs'))
-  })
-
-  it('supports the checked-in legacy renderer config keys', () => {
-    resolveMdsiteConfigPathMock.mockReturnValue(undefined)
-    existsSyncMock.mockImplementation((target: string) => (
-      target === '/renderer/content.config.yml' || target === '/content/docs'
-    ))
-    parseYamlMock.mockReturnValue({
-      contentPath: '/content/docs',
-      contentGitRepo: 'https://example.test/docs.git',
-      siteCanonical: 'https://example.test',
-      siteName: 'Legacy Site',
-    })
-    loadMdsiteConfigSyncMock.mockReturnValue({
-      config: { site: { name: 'Legacy Site' } },
-      configPath: '/renderer/.mdsite-compat.yml',
-      contentDir: '/content/docs',
-    })
-
-    prepareRendererRuntime('/renderer')
-
-    expect(stringifyYamlMock).toHaveBeenCalledWith(expect.objectContaining({
-      server: expect.objectContaining({
-        repo: 'https://example.test/docs.git',
-      }),
-      site: expect.objectContaining({
-        canonical: 'https://example.test',
-        name: 'Legacy Site',
-      }),
-    }))
-    expect(loadMdsiteConfigSyncMock).toHaveBeenCalledWith({
-      configPath: '/renderer/.mdsite-compat.yml',
-      contentPath: '/content/docs',
-    })
   })
 
   it('exits when no renderer config can be resolved', () => {

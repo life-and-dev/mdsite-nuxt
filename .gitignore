@@ -1,5 +1,4 @@
 # Nuxt dev/build outputs
-.output/
 .data/
 .nuxt/
 .nitro/
@@ -42,3 +41,8 @@ public/**/*.yml
 
 # Keep static assets
 !public/robots.txt
+
+# mdsite: generated state (renderer working dir; runtime artifacts and materialized renderer)
+.mdsite/*
+.output/
+# end mdsite

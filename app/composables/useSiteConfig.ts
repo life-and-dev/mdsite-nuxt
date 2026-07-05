@@ -9,13 +9,9 @@ export interface RawSiteConfig {
     name?: string
     canonical?: string
   }
-  server?: {
-    repo?: string
-    gitBranch?: string
-  }
   features?: {
     bibleTooltips?: boolean
-    sourceEdit?: boolean
+    sourceEdit?: string
   }
   themes?: {
     light?: { colors?: { primary?: string } }
@@ -26,13 +22,10 @@ export interface RawSiteConfig {
 export interface SiteConfig {
   siteName: string
   siteCanonical: string
-  contentGitRepo: string
-  contentGitBranch: string
-  contentGitPath: string
   contentPath: string
   features: {
     bibleTooltips: boolean
-    sourceEdit: boolean
+    sourceEdit: string
   }
   themeColorLight: string
   themeColorDark: string
@@ -41,33 +34,22 @@ export interface SiteConfig {
 /**
  * Pure helper that maps the raw runtime `siteConfig` object into the shape
  * the renderer actually consumes. Extracted from `useSiteConfig` so the
- * field mapping (notably `contentGitRepo` ← `server.repo`, which is what
- * powers the Edit on GitHub link in `AppBar` and `AppFooter`) can be unit
- * tested independently of the Nuxt runtime.
+ * field mapping can be unit tested independently of the Nuxt runtime.
  *
- * `contentGitPath` must be an absolute path when supplied (the renderer
- * sets it from `path.dirname(mdsite.configPath)` in `nuxt.config.ts`).
- * Leaving it undefined preserves the historical cwd-relative `'.'`
- * default, which is only correct when the renderer's cwd equals the git
- * repo root — pass an absolute path to make `useSourceEdit`'s
- * `relative(contentGitPath, contentPath)` computation deterministic
- * across server and client and avoid hydration mismatches.
+ * `sourceEdit` is a user-supplied URL prefix used by `useSourceEdit` to
+ * build per-page Edit links; an empty string disables the link.
  */
 export function mapSiteConfig(
   siteConfig: RawSiteConfig | undefined,
   contentPath: string | undefined,
-  contentGitPath: string | undefined = '.',
 ): SiteConfig {
   return {
     siteName: siteConfig?.site?.name || '',
     siteCanonical: siteConfig?.site?.canonical || '',
-    contentGitRepo: siteConfig?.server?.repo || '',
-    contentGitBranch: siteConfig?.server?.gitBranch || 'main',
-    contentGitPath: contentGitPath || '.',
     contentPath: contentPath || '.',
     features: {
       bibleTooltips: siteConfig?.features?.bibleTooltips ?? false,
-      sourceEdit: siteConfig?.features?.sourceEdit ?? false
+      sourceEdit: siteConfig?.features?.sourceEdit ?? ''
     },
     themeColorLight: siteConfig?.themes?.light?.colors?.primary || '#000000',
     themeColorDark: siteConfig?.themes?.dark?.colors?.primary || '#ffffff'
@@ -83,7 +65,6 @@ export function useSiteConfig(): SiteConfig {
 
   return mapSiteConfig(
     siteConfig,
-    config.public.contentPath,
-    config.public.contentGitPath as string | undefined
+    config.public.contentPath
   )
 }

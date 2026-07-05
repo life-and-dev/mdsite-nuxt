@@ -38,7 +38,7 @@ export function resolveFaviconSource(
 
 export interface GenerateFaviconsOptions {
   contentDir?: string
-  config?: { favicon?: string; site?: { name?: string } }
+  config?: { site?: { favicon?: string; name?: string } }
   outputDir?: string
 }
 
@@ -50,9 +50,9 @@ export async function generateFavicons(options: GenerateFaviconsOptions = {}): P
     ? { contentDir: options.contentDir, config: options.config }
     : loadMdsiteConfigSync()
   const { contentDir, config } = resolved
-  const siteName = (config as { site?: { name?: string } }).site?.name ?? 'site'
+  const siteName = config.site?.name ?? 'site'
 
-  const resolvedSource = resolveFaviconSource(contentDir, config.favicon ?? '')
+  const resolvedSource = resolveFaviconSource(contentDir, config.site?.favicon ?? '')
 
   if (!resolvedSource) {
     console.error('❌ No favicon source available (configured source missing AND bundled default not found).')
@@ -64,7 +64,7 @@ export async function generateFavicons(options: GenerateFaviconsOptions = {}): P
   await fs.ensureDir(publicDir)
 
   if (resolvedSource.isDefault) {
-    console.log('ℹ️ No favicon source configured (config.favicon empty or file not found). Using bundled default favicon.')
+    console.log('ℹ️ No favicon source configured (site.favicon empty or file not found). Using bundled default favicon.')
   }
 
   console.log(`🎨 Generating favicons for site: ${siteName}`)

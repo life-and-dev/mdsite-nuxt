@@ -35,6 +35,12 @@
               <slot />
             </div>
           </v-container>
+          <!--
+            Footer sits inside the main column (not as a fixed bottom bar) so it
+            scrolls with the article and only appears once the user has reached
+            the end of the page.
+          -->
+          <AppFooter />
         </v-main>
 
         <!-- Right Sidebar (Table of Contents) -->
@@ -110,11 +116,12 @@
             <slot />
           </div>
         </v-container>
+        <!--
+          In-flow footer for mobile: scrolls with the article content.
+        -->
+        <AppFooter />
       </v-main>
     </div>
-
-    <!-- Footer Bar (always visible on all layouts) -->
-    <AppFooter />
   </div>
 </template>
 

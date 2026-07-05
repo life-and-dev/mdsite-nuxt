@@ -66,12 +66,12 @@ describe('generate-favicons', () => {
   })
 
   describe('generateFavicons', () => {
-    it('uses the bundled default favicon and writes all expected assets when config.favicon is empty', async () => {
+    it('uses the bundled default favicon and writes all expected assets when site.favicon is empty', async () => {
       const outputDir = path.join(tmpDir, 'output')
 
       const ok = await generateFavicons({
         contentDir: tmpDir,
-        config: { favicon: '' },
+        config: { site: { favicon: '' } },
         outputDir,
       })
 
@@ -106,7 +106,7 @@ describe('generate-favicons', () => {
 
       const ok = await generateFavicons({
         contentDir: tmpDir,
-        config: { favicon: 'favicon.svg' },
+        config: { site: { favicon: 'favicon.svg' } },
         outputDir,
       })
 

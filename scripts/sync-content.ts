@@ -209,9 +209,22 @@ export async function startWatcher() {
         `${sourceDir}/**/*.md`            // Watch all markdown files
     ]
 
+    // Skip build/dependency directories (see `isExcludedSourceDir`). The
+    // matcher inspects every path segment so a hidden dir or
+    // `node_modules`/`dist` nested anywhere under the content dir is
+    // ignored, regardless of depth.
+    const ignored = (filePath: string, stats?: { isDirectory?: () => boolean }) => {
+        if (stats?.isDirectory && stats.isDirectory()) {
+            return isExcludedSourceDir(path.basename(filePath))
+        }
+        const segments = filePath.split(path.sep)
+        return segments.some((segment) => isExcludedSourceDir(segment))
+    }
+
     const watcher = chokidar.watch(patterns, {
         persistent: true,
         ignoreInitial: true, // Files already copied above
+        ignored,
         awaitWriteFinish: {
             stabilityThreshold: 500,
             pollInterval: 100
@@ -361,7 +374,29 @@ async function isDraftOnlyImage(imagePath: string): Promise<boolean> {
 }
 
 /**
- * Get all files with specific extension recursively
+ * Directory names that are never user-authored content. The recursive image
+ * walker and the dev-mode file watcher both skip these so a content
+ * directory that happens to be the project root (i.e. `mdsite.yml` lives
+ * at the repo root and `paths.input` is unset) does not crawl into the
+ * renderer working dir (`.mdsite/`), its `node_modules`, or other
+ * build/dependency artifacts.
+ *
+ * The rule is broad on purpose: any directory whose name starts with `.`
+ * (hidden dirs like `.git`, `.mdsite`, `.nuxt`, `.vscode`, `.idea`,
+ * `.history`, `.data`, `.output`, …) plus the two non-hidden directories
+ * that are always tooling artifacts (`node_modules`, `dist`).
+ *
+ * Keep this in sync with the same predicate in
+ * `scripts/generate-indices.ts` and the Nuxt Content collection `exclude`
+ * list in `content.config.ts`.
+ */
+function isExcludedSourceDir(name: string): boolean {
+    return name.startsWith('.') || name === 'node_modules' || name === 'dist'
+}
+
+/**
+ * Get all files with specific extension recursively, skipping
+ * build/dependency directories (see `isExcludedSourceDir`).
  */
 async function getAllFiles(dir: string, ext: string): Promise<string[]> {
     const files: string[] = []
@@ -377,6 +412,9 @@ async function getAllFiles(dir: string, ext: string): Promise<string[]> {
         const stat = await fs.stat(itemPath)
 
         if (stat.isDirectory()) {
+            if (isExcludedSourceDir(item)) {
+                continue
+            }
             const subFiles = await getAllFiles(itemPath, ext)
             files.push(...subFiles)
         } else if (item.toLowerCase().endsWith(`.${ext}`)) {

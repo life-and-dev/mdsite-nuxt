@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { generateNavigationJson, generateSearchIndexJson, generateFooterJson } from './generate-indices.js'
 
@@ -400,6 +400,155 @@ describe('generated content indices', () => {
       expect(paths).toContain('/')
       expect(paths).toContain('/about')
       expect(paths).not.toContain('/contacts')
+    })
+  })
+
+  describe('build/dependency directory exclusion', () => {
+    async function readSearchIndex() {
+      return JSON.parse(await fs.readFile(path.join(publicDir, '_search-index.json'), 'utf8'))
+    }
+
+    async function readNavigation() {
+      return JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
+    }
+
+    /**
+     * Build a fake content tree that mimics a project root used as the
+     * content directory: real user pages alongside build artifacts, hidden
+     * editor dirs, and a top-level `node_modules`/`dist`. Returns the set
+     * of "expected to be indexed" markdown paths.
+     */
+    async function plantMixedTree() {
+      // User-authored content at the content root
+      await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome home.', 'utf8')
+      await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nUseful guide.', 'utf8')
+      await fs.mkdir(path.join(contentDir, 'features'), { recursive: true })
+      await fs.writeFile(path.join(contentDir, 'features', 'theme.md'), '# Theme\n\nContent.', 'utf8')
+
+      // Renderer working dir with nested node_modules containing a README
+      // — mimics the layout the CLI materializes on first run.
+      await fs.mkdir(path.join(contentDir, '.mdsite', 'node_modules', 'some-pkg'), { recursive: true })
+      await fs.writeFile(
+        path.join(contentDir, '.mdsite', 'node_modules', 'some-pkg', 'README.md'),
+        '# some-pkg\n\nThis is a dependency README and should be ignored.'
+      )
+
+      // A top-level node_modules dir (e.g. when the content root IS the
+      // project root) should also be skipped.
+      await fs.mkdir(path.join(contentDir, 'node_modules', 'transitive'), { recursive: true })
+      await fs.writeFile(
+        path.join(contentDir, 'node_modules', 'transitive', 'README.md'),
+        '# transitive\n\nShould also be ignored.'
+      )
+
+      // A `dist` directory (top-level build output) should also be skipped.
+      await fs.mkdir(path.join(contentDir, 'dist', 'legacy'), { recursive: true })
+      await fs.writeFile(
+        path.join(contentDir, 'dist', 'legacy', 'stale.md'),
+        '# Stale\n\nShould be ignored.'
+      )
+
+      // Any hidden directory at any depth should be skipped — editor state,
+      // tooling caches, etc. `.vscode`, `.idea`, `.history`, `.cache` are
+      // all common offenders when the content root is the project root.
+      for (const hidden of ['.vscode', '.idea', '.history', '.cache']) {
+        await fs.mkdir(path.join(contentDir, hidden, 'notes'), { recursive: true })
+        await fs.writeFile(
+          path.join(contentDir, hidden, 'notes', 'scratch.md'),
+          `# ${hidden}\n\nShould be ignored.`
+        )
+      }
+
+      // Nuxt/Nitro/CMS output dirs that may sit next to the content.
+      for (const hidden of ['.nuxt', '.output', '.nitro', '.data', '.git']) {
+        await fs.mkdir(path.join(contentDir, hidden), { recursive: true })
+        await fs.writeFile(
+          path.join(contentDir, hidden, 'scratch.md'),
+          `# ${hidden}\n\nShould be ignored.`
+        )
+      }
+    }
+
+    it('does not index .md files under any hidden directory, node_modules, or dist', async () => {
+      await plantMixedTree()
+
+      // console.warn would log a "No H1 found" notice for any file the
+      // walker still visited — silence it so the test output stays clean.
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      try {
+        await generateSearchIndexJson()
+      } finally {
+        warnSpy.mockRestore()
+      }
+
+      const searchIndex = await readSearchIndex()
+      const paths = searchIndex.map((entry: { path: string }) => entry.path)
+      // User-authored pages are still indexed
+      expect(paths).toContain('/')
+      expect(paths).toContain('/guide')
+      expect(paths).toContain('/features/theme')
+      // No entry leaks from a build/dependency or hidden directory
+      for (const excluded of [
+        '.mdsite',
+        'node_modules',
+        'dist',
+        '.nuxt',
+        '.output',
+        '.nitro',
+        '.data',
+        '.git',
+        '.vscode',
+        '.idea',
+        '.history',
+        '.cache'
+      ]) {
+        expect(paths.some((p: string) => p.split('/').includes(excluded))).toBe(false)
+      }
+      const noH1Warnings = warnSpy.mock.calls
+        .map((call) => String(call[0] ?? ''))
+        .filter((line) => line.startsWith('⚠️'))
+      expect(noH1Warnings).toEqual([])
+    })
+
+    it('excludes build/dependency and hidden directories from the fallback navigation tree', async () => {
+      await plantMixedTree()
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      try {
+        await generateNavigationJson()
+      } finally {
+        warnSpy.mockRestore()
+      }
+
+      const navigation = await readNavigation()
+      const paths = navigation.map((n: { path: string }) => n.path)
+      expect(paths).toContain('/')
+      expect(paths).toContain('/guide')
+      expect(paths).toContain('/features/theme')
+      // No node should be derived from a build/dependency or hidden directory
+      for (const excluded of [
+        '.mdsite',
+        'node_modules',
+        'dist',
+        '.nuxt',
+        '.output',
+        '.nitro',
+        '.data',
+        '.git',
+        '.vscode',
+        '.idea',
+        '.history',
+        '.cache'
+      ]) {
+        expect(paths.some((p: string) => p.split('/').includes(excluded))).toBe(false)
+      }
+
+      const noH1Warnings = warnSpy.mock.calls
+        .map((call) => String(call[0] ?? ''))
+        .filter((line) => line.startsWith('⚠️'))
+      expect(noH1Warnings).toEqual([])
     })
   })
 })

@@ -836,7 +836,29 @@ function filePathToUrlPath(filePath: string, sourceDir: string): string {
 }
 
 /**
- * Get all markdown files recursively
+ * Directory names that are never user-authored content. The recursive
+ * markdown walker skips these so a content directory that happens to be
+ * the project root (i.e. `mdsite.yml` lives at the repo root and
+ * `paths.input` is unset) does not crawl into the renderer working dir
+ * (`.mdsite/`), its `node_modules`, or other build/dependency artifacts.
+ *
+ * The rule is broad on purpose: any directory whose name starts with `.`
+ * (hidden dirs like `.git`, `.mdsite`, `.nuxt`, `.vscode`, `.idea`,
+ * `.history`, `.data`, `.output`, …) plus the two non-hidden directories
+ * that are always tooling artifacts (`node_modules`, `dist`). Keeping the
+ * list narrow would require enumerating every CI/editor/build tool that
+ * might leave a hidden directory next to the content.
+ *
+ * Keep this in sync with the Nuxt Content collection `exclude` list in
+ * `content.config.ts` — both are the same safety net at two layers.
+ */
+function isExcludedSourceDir(name: string): boolean {
+    return name.startsWith('.') || name === 'node_modules' || name === 'dist'
+}
+
+/**
+ * Get all markdown files recursively, skipping build/dependency directories
+ * (see `isExcludedSourceDir`).
  */
 async function getAllMarkdownFiles(dir: string): Promise<string[]> {
     const files: string[] = []
@@ -852,6 +874,9 @@ async function getAllMarkdownFiles(dir: string): Promise<string[]> {
         const stat = await fs.stat(itemPath)
 
         if (stat.isDirectory()) {
+            if (isExcludedSourceDir(item)) {
+                continue
+            }
             const subFiles = await getAllMarkdownFiles(itemPath)
             files.push(...subFiles)
         } else if (item.endsWith('.md') && !item.endsWith('.draft.md')) {

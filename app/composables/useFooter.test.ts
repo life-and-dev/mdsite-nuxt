@@ -1,12 +1,16 @@
 /**
  * Unit tests for the pure `toFooterLinks` helper extracted from
- * `useFooter`. The composable now uses `useAsyncData`, which fetches
- * `/_footer.json` during SSR. The Nitro static preset (used by
- * `mdsite generate`) does not serve that file as a static asset, so the
- * prerender's `localFetch` falls through to the catch-all HTML route and
- * returns the page HTML string. Without coercion that string ends up in
- * `data.value` and the AppFooter's `.map()` call throws. These tests pin
- * the defensive behaviour down.
+ * `useFooter`.
+ *
+ * On the server, `_footer.json` is read from disk (see
+ * `readFooterLinksFromDisk` and the "SERVER-SIDE FOOTER LOADING" block
+ * in `useFooter.ts`), so the SSR path always returns valid JSON and this
+ * coercion is a no-op there.
+ *
+ * These tests pin down the defensive behaviour for the CLIENT-side
+ * `$fetch` path, where a missing or corrupted static file (404 HTML,
+ * empty body, null from a failed fetch, etc.) could otherwise leak into
+ * `AppFooter`'s `.map()` call and throw at render time.
  */
 
 import { describe, expect, it } from 'vitest'

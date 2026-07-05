@@ -57,7 +57,15 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    preset: 'static'  // Pure static preset - no SPA fallbacks
+    preset: 'static',  // Pure static preset - no SPA fallbacks
+    // The `mdsite` CLI sets `MDSITE_NITRO_OUTPUT_DIR` in dev mode so the
+    // build output lands in the content directory's `<paths.build>/.output/`
+    // rather than inside the renderer source (e.g. the `mdsite-nuxt/`
+    // submodule). The default `.output` is kept for direct use of the
+    // renderer (e.g. running `nuxt generate` by hand for renderer dev).
+    output: {
+      dir: process.env.MDSITE_NITRO_OUTPUT_DIR || '.output'
+    }
   },
 
   ssr: ssrEnabled,

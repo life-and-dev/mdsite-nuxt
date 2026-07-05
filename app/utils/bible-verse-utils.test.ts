@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { createBibleHubInterlinearUrl, parseReference } from './bible-verse-utils'
+import {
+  createBibleHubInterlinearUrl,
+  parseReference,
+  parseVerseRange,
+  processBollsCrossChapterRange,
+  type BollsVerseResponse
+} from './bible-verse-utils'
 
 /**
  * Unit tests for BibleHub interlinear URL generation
@@ -144,5 +150,73 @@ describe('parseReference', () => {
     const result = parseReference('John 3:16 (esv)')
     expect(result.reference).toBe('John 3:16 (esv)')
     expect(result.translation).toBe('ESV')
+  })
+})
+
+const makeVerse = (verse: number, text: string): BollsVerseResponse => ({ pk: verse, verse, text })
+
+describe('parseVerseRange', () => {
+  it('parses a cross-chapter range', () => {
+    expect(parseVerseRange('Genesis 1:20-2:2')).toEqual({
+      book: 'Genesis', startChapter: 1, startVerse: 20,
+      endChapter: 2, endVerse: 2, isCrossChapter: true,
+    })
+  })
+
+  it('parses a cross-chapter range with a multi-word book', () => {
+    expect(parseVerseRange('2 Corinthians 4:16-5:9')).toEqual({
+      book: '2 Corinthians', startChapter: 4, startVerse: 16,
+      endChapter: 5, endVerse: 9, isCrossChapter: true,
+    })
+  })
+
+  it('parses a same-chapter range', () => {
+    expect(parseVerseRange('John 3:16-18')).toEqual({
+      book: 'John', startChapter: 3, startVerse: 16,
+      endChapter: 3, endVerse: 18, isCrossChapter: false,
+    })
+  })
+
+  it('parses a single verse', () => {
+    expect(parseVerseRange('John 3:16')).toEqual({
+      book: 'John', startChapter: 3, startVerse: 16,
+      endChapter: 3, endVerse: 16, isCrossChapter: false,
+    })
+  })
+
+  it('returns null for a chapter-only reference', () => {
+    expect(parseVerseRange('Psalm 23')).toBeNull()
+  })
+})
+
+describe('processBollsCrossChapterRange', () => {
+  it('merges the tail of the start chapter and the head of the end chapter', () => {
+    const chapter1 = [
+      makeVerse(18, 'c1v18'), makeVerse(19, 'c1v19'),
+      makeVerse(20, 'c1v20'), makeVerse(21, 'c1v21'), makeVerse(22, 'c1v22'),
+    ]
+    const chapter2 = [
+      makeVerse(1, 'c2v1'), makeVerse(2, 'c2v2'), makeVerse(3, 'c2v3'),
+    ]
+    // Genesis 1:20-2:2 => startVerse=20, endVerse=2
+    const result = processBollsCrossChapterRange([chapter1, chapter2], 'ESV', 20, 2)
+    // c1 >= 20 -> v20,v21,v22 ; c2 <= 2 -> v1,v2 ; 5 verses -> truncated to 4
+    expect(result.text).toBe('c1v20 c1v21 c1v22 c2v1 ...')
+    expect(result.translation).toBe('ESV')
+  })
+
+  it('includes full middle chapters when the range spans 3 chapters', () => {
+    const c1 = [makeVerse(9, 'a9'), makeVerse(10, 'a10')]
+    const c2 = [makeVerse(1, 'b1')]
+    const c3 = [makeVerse(1, 'c1'), makeVerse(2, 'c2')]
+    const result = processBollsCrossChapterRange([c1, c2, c3], 'KJV', 10, 2)
+    // c1 >= 10 -> a10 ; c2 all -> b1 ; c3 <= 2 -> c1,c2 ; 4 verses -> no truncation
+    expect(result.text).toBe('a10 b1 c1 c2')
+    expect(result.translation).toBe('KJV')
+  })
+
+  it('returns empty text when no chapter data is provided', () => {
+    const result = processBollsCrossChapterRange([], 'ESV', 1, 1)
+    expect(result.text).toBe('')
   })
 })

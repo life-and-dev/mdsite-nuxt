@@ -5,7 +5,7 @@
 /**
  * Bolls.life API response format for single verse
  */
-interface BollsVerseResponse {
+export interface BollsVerseResponse {
   pk: number
   verse: number
   text: string
@@ -20,6 +20,15 @@ export interface ProcessedBibleVerse {
 export interface ParsedReference {
   reference: string  // Reference without translation (e.g., "John 3:16")
   translation: string  // Translation code (e.g., "ESV", defaults to "ESV")
+}
+
+export interface ParsedVerseRange {
+  book: string
+  startChapter: number
+  startVerse: number
+  endChapter: number
+  endVerse: number
+  isCrossChapter: boolean
 }
 
 /**
@@ -130,6 +139,57 @@ export function parseReference(fullReference: string): ParsedReference {
   }
 }
 
+/**
+ * Parse a Bible reference into a structured verse range.
+ *
+ * Handles single verse ("John 3:16"), same-chapter range ("John 3:16-18"),
+ * and cross-chapter range ("Genesis 1:20-2:2"). Returns null when the
+ * reference cannot be parsed (e.g. chapter-only "Psalm 23").
+ */
+export function parseVerseRange(reference: string): ParsedVerseRange | null {
+  // Groups: 1=book, 2=chapter, 3=startVerse,
+  //         4=end number (endVerse for same-chapter, OR endChapter for cross-chapter),
+  //         5=endVerse (only present for cross-chapter "C:V-C:V")
+  const match = reference.match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+)(?::(\d+))?)?/)
+
+  if (!match) return null
+
+  const [, book, chapterStr, startVerseStr, endNumberStr, crossEndVerseStr] = match
+  if (!book || !chapterStr || !startVerseStr) return null
+
+  const startChapter = parseInt(chapterStr, 10)
+  const startVerse = parseInt(startVerseStr, 10)
+
+  // Cross-chapter range: "C:V-C:V" (e.g. 1:20-2:2)
+  if (endNumberStr && crossEndVerseStr) {
+    const endChapter = parseInt(endNumberStr, 10)
+    const endVerse = parseInt(crossEndVerseStr, 10)
+    return {
+      book, startChapter, startVerse,
+      endChapter, endVerse,
+      isCrossChapter: endChapter > startChapter,
+    }
+  }
+
+  // Same-chapter range: "C:V-V" (e.g. 3:16-18)
+  if (endNumberStr) {
+    return {
+      book, startChapter, startVerse,
+      endChapter: startChapter,
+      endVerse: parseInt(endNumberStr, 10),
+      isCrossChapter: false,
+    }
+  }
+
+  // Single verse: "C:V"
+  return {
+    book, startChapter, startVerse,
+    endChapter: startChapter,
+    endVerse: startVerse,
+    isCrossChapter: false,
+  }
+}
+
 const MAX_VERSES = 4
 
 /**
@@ -163,6 +223,18 @@ export function processBollsVerse(data: BollsVerseResponse, translation: string)
 }
 
 /**
+ * Join verses into a single text, truncating to MAX_VERSES and appending an
+ * ellipsis when truncated. Shared by all range/verse processors.
+ */
+function processVerses(verses: BollsVerseResponse[], translation: string): ProcessedBibleVerse {
+  const wasTruncated = verses.length > MAX_VERSES
+  const limitedVerses = verses.slice(0, MAX_VERSES)
+  const text = limitedVerses.map(v => stripHtml(v.text)).join(' ')
+  const finalText = wasTruncated ? text + ' ...' : text
+  return { text: finalText, translation: translation.toUpperCase() }
+}
+
+/**
  * Process Bolls.life API response for verse range
  * @param data - Array of verses from Bolls.life API
  * @param translation - Translation code
@@ -184,21 +256,42 @@ export function processBollsVerseRange(
     verses = data.filter(v => v.verse >= startVerse && v.verse <= end)
   }
 
-  // Truncate to first 4 verses if needed
-  const wasTruncated = verses.length > MAX_VERSES
-  const limitedVerses = verses.slice(0, MAX_VERSES)
+  return processVerses(verses, translation)
+}
 
-  // Join and strip HTML
-  const text = limitedVerses
-    .map(v => stripHtml(v.text))
-    .join(' ')
-
-  const finalText = wasTruncated ? text + ' ...' : text
-
-  return {
-    text: finalText,
-    translation: translation.toUpperCase()
+/**
+ * Process Bolls.life API responses for a CROSS-CHAPTER verse range
+ * (e.g. "Genesis 1:20-2:2").
+ *
+ * @param chapterData - Verses for each chapter in the range, ordered from
+ *   the start chapter to the end chapter.
+ * @param translation - Translation code
+ * @param startVerse - Starting verse number (in the first chapter)
+ * @param endVerse - Ending verse number (in the last chapter)
+ * @returns Processed verses with truncation if needed
+ */
+export function processBollsCrossChapterRange(
+  chapterData: BollsVerseResponse[][],
+  translation: string,
+  startVerse: number,
+  endVerse: number
+): ProcessedBibleVerse {
+  if (chapterData.length === 0) {
+    return { text: '', translation: translation.toUpperCase() }
   }
+
+  // First chapter: keep verses from startVerse onwards. (chapterData[0] is
+  // defined because we returned early above when chapterData is empty.)
+  const first = chapterData[0]!.filter(v => v.verse >= startVerse)
+  // Middle chapters (if any): keep everything.
+  const middle = chapterData.slice(1, -1).flat()
+  // Last chapter: keep verses up to endVerse (only when more than one chapter;
+  // the index is valid because length > 1).
+  const last = chapterData.length > 1
+    ? chapterData[chapterData.length - 1]!.filter(v => v.verse <= endVerse)
+    : []
+
+  return processVerses([...first, ...middle, ...last], translation)
 }
 
 /**

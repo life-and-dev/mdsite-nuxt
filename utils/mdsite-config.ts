@@ -259,7 +259,7 @@ function isValidFooterItem(item: unknown): item is MdsiteFooterItem {
   if (typeof item === 'object') {
     const keys = Object.keys(item as Record<string, unknown>)
     if (keys.length !== 1) return false
-    const value = (item as Record<string, unknown>)[keys[0]]
+    const value = (item as Record<string, unknown>)[keys[0]!]
     return value === null || typeof value === 'string'
   }
   return false

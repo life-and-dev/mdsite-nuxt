@@ -475,7 +475,7 @@ function isValidFooterItem(item: unknown): item is MdsiteFooterItem {
     if (typeof item === 'object') {
         const keys = Object.keys(item as Record<string, unknown>)
         if (keys.length !== 1) return false
-        const value = (item as Record<string, unknown>)[keys[0]]
+        const value = (item as Record<string, unknown>)[keys[0]!]
         return value === null || typeof value === 'string'
     }
     return false
@@ -566,7 +566,7 @@ function extractInternalPath(item: MdsiteFooterItem): string | null {
     if (item && typeof item === 'object') {
         const keys = Object.keys(item)
         if (keys.length === 1) {
-            const value = item[keys[0]]
+            const value = item[keys[0]!]
             if (typeof value === 'string') {
                 return resolveFooterPath(value)
             }
@@ -616,7 +616,7 @@ async function processFooterItems(items: MdsiteFooterItem[]): Promise<FooterLink
         // Object form: { title: path-or-url }
         const keys = Object.keys(item)
         if (keys.length !== 1) continue
-        const displayTitle = keys[0]
+        const displayTitle = keys[0]!
         const value = item[displayTitle]
 
         if (value === null) {

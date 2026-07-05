@@ -1,7 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import path from 'path'
 import { buildDarkOverrideCss, getDomainThemes } from './app/config/themes'
-import { createBibleReferencePatterns } from './app/utils/bible-book-names'
+import { isInExcludedContext, wrapBibleReferences } from './app/utils/bible-wrap'
 import { runBuildFallbackHooks } from './scripts/renderer-hooks'
 import { withBasePath } from './utils/base-url'
 import { loadMdsiteConfigSync } from './utils/mdsite-config'
@@ -124,30 +124,6 @@ export default defineNuxtConfig({
       const { file } = ctx
       if (!file.id.endsWith('.md')) return
 
-      const excludedContexts = ['```', '~~~', '<code', '<pre', '<a ']
-
-      // Check if we're inside excluded context
-      const isInExcludedContext = (text: string, index: number): boolean => {
-        const before = text.substring(0, index)
-
-        // Check for code blocks
-        const codeBlockCount = (before.match(/```/g) || []).length
-        if (codeBlockCount % 2 === 1) return true
-
-        // Check for inline code blocks - count backticks in the current line
-        const lastNewline = before.lastIndexOf('\n')
-        const currentLine = lastNewline === -1 ? before : before.substring(lastNewline + 1)
-        const backtickCount = (currentLine.match(/`/g) || []).length
-        if (backtickCount % 2 === 1) return true
-
-        // Check for links - rough check for [text](url) format
-        const lastOpenBracket = before.lastIndexOf('[')
-        const lastCloseBracket = before.lastIndexOf(']')
-        if (lastOpenBracket > lastCloseBracket) return true
-
-        return false
-      }
-
       // Process GFM Alerts (> [!NOTE])
       const alertPattern = /^> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*(?:\n>.*)*)/gm
       file.body = file.body.replace(alertPattern, (match: any, type: string, content: string, offset: number) => {
@@ -165,31 +141,7 @@ export default defineNuxtConfig({
 
       console.log('📖 Processing Bible verses in:', file.id)
 
-      const patterns = createBibleReferencePatterns()
-
-      // Process each pattern
-      patterns.forEach(pattern => {
-        const matches: Array<{ index: number; text: string }> = []
-
-        let match
-        while ((match = pattern.exec(file.body)) !== null) {
-          if (!isInExcludedContext(file.body, match.index)) {
-            matches.push({
-              index: match.index,
-              text: match[0]
-            })
-          }
-        }
-        pattern.lastIndex = 0
-
-        // Replace matches in reverse order to preserve indices
-        matches.reverse().forEach(({ index, text }) => {
-          const before = file.body.substring(0, index)
-          const after = file.body.substring(index + text.length)
-          const wrapped = `<span class="bible-ref" data-reference="${text}">${text}</span>`
-          file.body = before + wrapped + after
-        })
-      })
+      file.body = wrapBibleReferences(file.body)
     },
 
     'build:before': async () => {

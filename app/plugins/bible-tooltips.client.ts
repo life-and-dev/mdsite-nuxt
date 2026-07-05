@@ -2,8 +2,10 @@
 import {
   processBollsVerse,
   processBollsVerseRange,
+  processBollsCrossChapterRange,
   createBibleHubInterlinearUrl,
   parseReference,
+  parseVerseRange,
   getBookNumber,
   type ProcessedBibleVerse
 } from '~/utils/bible-verse-utils'
@@ -59,32 +61,52 @@ export default defineNuxtPlugin((nuxtApp) => {
       const { reference, translation } = parseReference(fullReference)
 
       try {
-        // Parse the reference: "John 3:16" or "John 3:16-18"
-        const match = reference.match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+))?/)
+        // Parse the reference into a structured range. Handles single verse
+        // ("John 3:16"), same-chapter range ("John 3:16-18"), and cross-chapter
+        // range ("Genesis 1:20-2:2").
+        const parsed = parseVerseRange(reference)
 
-        if (!match) {
-          throw new Error(`Invalid reference format: ${reference}`)
-        }
-
-        const [, bookName, chapter, startVerse, endVerse] = match
-
-        // Type guards: ensure captured groups exist
-        if (!bookName || !chapter || !startVerse) {
+        if (!parsed) {
           throw new Error(`Invalid reference format: ${reference}`)
         }
 
         // Get book number (1-66)
-        const bookNumber = getBookNumber(bookName)
+        const bookNumber = getBookNumber(parsed.book)
         if (bookNumber === null) {
-          throw new Error(`Unknown book: ${bookName}`)
+          throw new Error(`Unknown book: ${parsed.book}`)
         }
 
         let result: ProcessedBibleVerse
 
-        if (endVerse) {
-          // Verse range: fetch entire chapter and filter
+        if (parsed.isCrossChapter) {
+          // Cross-chapter range (e.g. Genesis 1:20-2:2): fetch every chapter in
+          // the range in parallel, then merge and filter.
+          const chapterNumbers: number[] = []
+          for (let c = parsed.startChapter; c <= parsed.endChapter; c++) {
+            chapterNumbers.push(c)
+          }
+
+          const chapterData = await Promise.all(
+            chapterNumbers.map(async (chapter) => {
+              const url = `https://bolls.life/get-text/${translation}/${bookNumber}/${chapter}/`
+              const response = await fetch(url)
+              if (!response.ok) {
+                throw new Error(`API request failed with status ${response.status}`)
+              }
+              return response.json()
+            })
+          )
+
+          result = processBollsCrossChapterRange(
+            chapterData,
+            translation,
+            parsed.startVerse,
+            parsed.endVerse
+          )
+        } else if (parsed.startVerse !== parsed.endVerse) {
+          // Same-chapter range (e.g. John 3:16-18): fetch the chapter and filter.
           // Format: https://bolls.life/get-text/ESV/43/3/
-          const url = `https://bolls.life/get-text/${translation}/${bookNumber}/${chapter}/`
+          const url = `https://bolls.life/get-text/${translation}/${bookNumber}/${parsed.startChapter}/`
           const response = await fetch(url)
 
           if (!response.ok) {
@@ -95,13 +117,13 @@ export default defineNuxtPlugin((nuxtApp) => {
           result = processBollsVerseRange(
             data,
             translation,
-            parseInt(startVerse),
-            parseInt(endVerse)
+            parsed.startVerse,
+            parsed.endVerse
           )
         } else {
-          // Single verse
+          // Single verse (e.g. John 3:16)
           // Format: https://bolls.life/get-verse/ESV/43/3/16/
-          const url = `https://bolls.life/get-verse/${translation}/${bookNumber}/${chapter}/${startVerse}/`
+          const url = `https://bolls.life/get-verse/${translation}/${bookNumber}/${parsed.startChapter}/${parsed.startVerse}/`
           const response = await fetch(url)
 
           if (!response.ok) {

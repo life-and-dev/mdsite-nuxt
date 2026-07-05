@@ -133,6 +133,12 @@ describe('Bible Reference Parsing', () => {
     expect(matches).toEqual(['2 Corinthians 4:16-5:9'])
   })
 
+  it('should capture translation suffixes in matches', () => {
+    const text = 'Read John 3:16 (ESV) and Genesis 1:20-2:2 (KJV) today.'
+    const matches = findAllMatches(text)
+    expect(matches).toEqual(['John 3:16 (ESV)', 'Genesis 1:20-2:2 (KJV)'])
+  })
+
   it('should parse same-chapter ranges', () => {
     const text = 'John 3:16-18 is about salvation.'
     const matches = findAllMatches(text)

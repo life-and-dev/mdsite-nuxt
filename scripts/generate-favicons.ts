@@ -9,8 +9,6 @@ import { loadMdsiteConfigSync, resolveMdsiteConfigPath, type MdsiteConfig } from
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const DEFAULT_FAVICON_PATH = fileURLToPath(new URL('../assets/default-favicon.svg', import.meta.url))
-
 const FAVICON_SIZES = {
   ico: [16, 32],
   appleTouchIcon: 180,
@@ -18,27 +16,48 @@ const FAVICON_SIZES = {
   pwaIcon512: 512
 } as const
 
+const DEFAULT_MONOGRAM_BG = '#0969da'
+const DEFAULT_MONOGRAM_FG = '#ffffff'
+
+export type ResolvedFaviconSource =
+  | { kind: 'file'; sourcePath: string }
+  | { kind: 'monogram' }
+
 export function resolveFaviconSource(
   contentDir: string,
   favicon: string,
-): { sourcePath: string; isDefault: boolean } | null {
+): ResolvedFaviconSource | null {
   if (typeof favicon === 'string' && favicon.trim().length > 0) {
     const candidate = path.resolve(contentDir, favicon)
     if (fs.pathExistsSync(candidate)) {
-      return { sourcePath: candidate, isDefault: false }
+      return { kind: 'file', sourcePath: candidate }
     }
   }
 
-  if (fs.pathExistsSync(DEFAULT_FAVICON_PATH)) {
-    return { sourcePath: DEFAULT_FAVICON_PATH, isDefault: true }
-  }
+  return { kind: 'monogram' }
+}
 
-  return null
+export function buildMonogramSvg(
+  siteName: string,
+  bgColor: string,
+  fgColor: string = DEFAULT_MONOGRAM_FG,
+): string {
+  const letterMatch = siteName.trim().match(/[A-Za-z0-9]/)
+  const letter = letterMatch ? letterMatch[0].toUpperCase() : 'M'
+  return (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">' +
+    `<rect width="512" height="512" rx="96" fill="${bgColor}"/>` +
+    `<text x="256" y="256" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="300" font-weight="700" fill="${fgColor}" text-anchor="middle" dominant-baseline="central">${letter}</text>` +
+    '</svg>'
+  )
 }
 
 export interface GenerateFaviconsOptions {
   contentDir?: string
-  config?: { site?: { favicon?: string; name?: string } }
+  config?: {
+    site?: { favicon?: string; name?: string }
+    themes?: { light?: { colors?: { primary?: string } } }
+  }
   outputDir?: string
 }
 
@@ -55,31 +74,39 @@ export async function generateFavicons(options: GenerateFaviconsOptions = {}): P
   const resolvedSource = resolveFaviconSource(contentDir, config.site?.favicon ?? '')
 
   if (!resolvedSource) {
-    console.error('❌ No favicon source available (configured source missing AND bundled default not found).')
+    console.error('❌ No favicon source available.')
     return false
   }
 
-  const { sourcePath } = resolvedSource
   const publicDir = options.outputDir ?? path.resolve(__dirname, '..', 'public')
   await fs.ensureDir(publicDir)
 
-  if (resolvedSource.isDefault) {
-    console.log('ℹ️ No favicon source configured (site.favicon empty or file not found). Using bundled default favicon.')
-  }
+  let svgBuffer: Buffer
 
-  console.log(`🎨 Generating favicons for site: ${siteName}`)
-  console.log(`   Source: ${sourcePath}`)
-  console.log(`   Output: ${publicDir}`)
+  if (resolvedSource.kind === 'file') {
+    const { sourcePath } = resolvedSource
+    console.log(`🎨 Generating favicons for site: ${siteName}`)
+    console.log(`   Source: ${sourcePath}`)
+    console.log(`   Output: ${publicDir}`)
+    svgBuffer = await fs.readFile(sourcePath)
+  } else {
+    const bgColor = config.themes?.light?.colors?.primary ?? DEFAULT_MONOGRAM_BG
+    const svgString = buildMonogramSvg(siteName, bgColor)
+    console.log(`🎨 Generating favicons for site: ${siteName}`)
+    console.log(`ℹ️ No favicon configured — generating monogram from site name "${siteName}".`)
+    console.log(`   Output: ${publicDir}`)
+    svgBuffer = Buffer.from(svgString, 'utf8')
+  }
 
   try {
     // Copy SVG as-is (for modern browsers)
     const svgTargetPath = path.join(publicDir, 'favicon.svg')
-    await fs.copy(sourcePath, svgTargetPath)
+    await fs.writeFile(svgTargetPath, svgBuffer)
     console.log(`   ✓ SVG: favicon.svg`)
 
     // Generate ICO (32x32 with transparent padding)
     const icoTargetPath = path.join(publicDir, 'favicon.ico')
-    const png32Buffer = await sharp(sourcePath)
+    const png32Buffer = await sharp(svgBuffer)
       .resize(32, 32, {
         fit: 'contain',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
@@ -91,7 +118,7 @@ export async function generateFavicons(options: GenerateFaviconsOptions = {}): P
 
     // Generate Apple Touch Icon (180x180 with transparent padding)
     const appleTouchPath = path.join(publicDir, 'apple-touch-icon.png')
-    await sharp(sourcePath)
+    await sharp(svgBuffer)
       .resize(FAVICON_SIZES.appleTouchIcon, FAVICON_SIZES.appleTouchIcon, {
         fit: 'contain',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
@@ -102,7 +129,7 @@ export async function generateFavicons(options: GenerateFaviconsOptions = {}): P
 
     // Generate PWA Icon 192x192
     const icon192Path = path.join(publicDir, 'icon-192.png')
-    await sharp(sourcePath)
+    await sharp(svgBuffer)
       .resize(FAVICON_SIZES.pwaIcon192, FAVICON_SIZES.pwaIcon192, {
         fit: 'contain',
         background: { r: 255, g: 255, b: 255, alpha: 0 }
@@ -113,7 +140,7 @@ export async function generateFavicons(options: GenerateFaviconsOptions = {}): P
 
     // Generate PWA Icon 512x512
     const icon512Path = path.join(publicDir, 'icon-512.png')
-    await sharp(sourcePath)
+    await sharp(svgBuffer)
       .resize(FAVICON_SIZES.pwaIcon512, FAVICON_SIZES.pwaIcon512, {
         fit: 'contain',
         background: { r: 255, g: 255, b: 255, alpha: 0 }

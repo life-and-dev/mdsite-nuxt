@@ -5,10 +5,9 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { generateFavicons, generateWebManifest, resolveFaviconSource } from './generate-favicons.js'
+import { buildMonogramSvg, generateFavicons, generateWebManifest, resolveFaviconSource } from './generate-favicons.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DEFAULT_FAVICON_PATH = path.resolve(__dirname, '..', 'assets', 'default-favicon.svg')
 
 describe('generate-favicons', () => {
   let tmpDir: string
@@ -22,24 +21,19 @@ describe('generate-favicons', () => {
   })
 
   describe('resolveFaviconSource', () => {
-    it('falls back to the bundled default favicon when favicon is an empty string', () => {
+    it('returns a monogram source when favicon is an empty string', () => {
       const result = resolveFaviconSource(tmpDir, '')
 
-      expect(result).not.toBeNull()
-      expect(result!.isDefault).toBe(true)
-      expect(path.basename(result!.sourcePath)).toBe('default-favicon.svg')
-      expect(fs.existsSync(result!.sourcePath)).toBe(true)
+      expect(result).toEqual({ kind: 'monogram' })
     })
 
-    it('falls back to the bundled default favicon when favicon is only whitespace', () => {
+    it('returns a monogram source when favicon is only whitespace', () => {
       const result = resolveFaviconSource(tmpDir, '   ')
 
-      expect(result).not.toBeNull()
-      expect(result!.isDefault).toBe(true)
-      expect(path.basename(result!.sourcePath)).toBe('default-favicon.svg')
+      expect(result).toEqual({ kind: 'monogram' })
     })
 
-    it('uses the configured source when the favicon file exists under the content dir', () => {
+    it('returns a file source when the favicon file exists under the content dir', () => {
       const relPath = 'favicon.svg'
       const absPath = path.join(tmpDir, relPath)
       const customSvg =
@@ -50,28 +44,47 @@ describe('generate-favicons', () => {
 
       const result = resolveFaviconSource(tmpDir, relPath)
 
-      expect(result).not.toBeNull()
-      expect(result!.isDefault).toBe(false)
-      expect(result!.sourcePath).toBe(path.resolve(tmpDir, relPath))
+      expect(result).toEqual({ kind: 'file', sourcePath: path.resolve(tmpDir, relPath) })
     })
 
-    it('falls back to the bundled default favicon when the configured file does not exist', () => {
+    it('returns a monogram source when the configured file does not exist', () => {
       const result = resolveFaviconSource(tmpDir, 'does-not-exist.svg')
 
-      expect(result).not.toBeNull()
-      expect(result!.isDefault).toBe(true)
-      expect(path.basename(result!.sourcePath)).toBe('default-favicon.svg')
-      expect(fs.existsSync(result!.sourcePath)).toBe(true)
+      expect(result).toEqual({ kind: 'monogram' })
+    })
+  })
+
+  describe('buildMonogramSvg', () => {
+    it('uppercases the first alphanumeric char of the site name', () => {
+      const svg = buildMonogramSvg('mdsite', '#0969da')
+      expect(svg).toContain('>M<')
+      expect(svg).toContain('fill="#0969da"')
+      expect(svg).toContain('viewBox="0 0 512 512"')
+    })
+
+    it('skips leading non-alphanumeric characters when picking the letter', () => {
+      const svg = buildMonogramSvg('   - 7 wonders', '#000000')
+      expect(svg).toContain('>7<')
+    })
+
+    it('falls back to "M" when the site name is empty or whitespace', () => {
+      expect(buildMonogramSvg('', '#000000')).toContain('>M<')
+      expect(buildMonogramSvg('   ', '#000000')).toContain('>M<')
+    })
+
+    it('uses the provided foreground color', () => {
+      const svg = buildMonogramSvg('Demo', '#112233', '#ffeedd')
+      expect(svg).toContain('fill="#ffeedd"')
     })
   })
 
   describe('generateFavicons', () => {
-    it('uses the bundled default favicon and writes all expected assets when site.favicon is empty', async () => {
+    it('writes a monogram favicon.svg and all raster assets when site.favicon is empty', async () => {
       const outputDir = path.join(tmpDir, 'output')
 
       const ok = await generateFavicons({
         contentDir: tmpDir,
-        config: { site: { favicon: '' } },
+        config: { site: { favicon: '', name: 'My Docs' } },
         outputDir,
       })
 
@@ -90,13 +103,36 @@ describe('generate-favicons', () => {
         expect(fs.statSync(filePath).size).toBeGreaterThan(0)
       }
 
-      // The default source svg is copied verbatim as favicon.svg
-      const defaultSvgContent = fs.readFileSync(DEFAULT_FAVICON_PATH, 'utf8')
       const writtenSvgContent = fs.readFileSync(path.join(outputDir, 'favicon.svg'), 'utf8')
-      expect(writtenSvgContent).toBe(defaultSvgContent)
+      // The monogram for "My Docs" uses the first alphanumeric char "M", uppercased.
+      expect(writtenSvgContent).toContain('<text')
+      expect(writtenSvgContent).toContain('>M<')
+      // Monogram default background color when no theme is configured.
+      expect(writtenSvgContent).toContain('fill="#0969da"')
+      // Must not leak the old bundled default favicon asset path or content.
+      expect(writtenSvgContent).not.toContain('default-favicon')
+      expect(writtenSvgContent).not.toContain('inkscape')
     })
 
-    it('uses the configured custom source svg over the bundled default', async () => {
+    it('uses the configured primary color from themes.light.colors.primary for the monogram', async () => {
+      const outputDir = path.join(tmpDir, 'output')
+
+      const ok = await generateFavicons({
+        contentDir: tmpDir,
+        config: {
+          site: { favicon: '', name: 'Acme' },
+          themes: { light: { colors: { primary: '#ff00aa' } } },
+        },
+        outputDir,
+      })
+
+      expect(ok).toBe(true)
+      const writtenSvgContent = fs.readFileSync(path.join(outputDir, 'favicon.svg'), 'utf8')
+      expect(writtenSvgContent).toContain('fill="#ff00aa"')
+      expect(writtenSvgContent).toContain('>A<')
+    })
+
+    it('uses the configured custom source svg verbatim', async () => {
       const outputDir = path.join(tmpDir, 'output')
       const customSvg =
         '<?xml version="1.0" encoding="UTF-8"?>' +
@@ -114,10 +150,8 @@ describe('generate-favicons', () => {
 
       const writtenSvgContent = fs.readFileSync(path.join(outputDir, 'favicon.svg'), 'utf8')
       expect(writtenSvgContent).toBe(customSvg)
-
-      // And it is NOT the bundled default
-      const defaultSvgContent = fs.readFileSync(DEFAULT_FAVICON_PATH, 'utf8')
-      expect(writtenSvgContent).not.toBe(defaultSvgContent)
+      // The custom user source must not be replaced with the monogram template.
+      expect(writtenSvgContent).not.toContain('dominant-baseline="central"')
     })
   })
 

@@ -157,6 +157,45 @@ describe('generate-favicons', () => {
       expect(writtenSvgContent).toContain('>A<')
     })
 
+    it('uses the configured on-primary color from themes.light.colors.on-primary for the monogram foreground', async () => {
+      const outputDir = path.join(tmpDir, 'output-fg')
+
+      const ok = await generateFavicons({
+        contentDir: tmpDir,
+        config: {
+          site: { favicon: '', name: 'Acme' },
+          themes: { light: { colors: { primary: '#ff00aa', 'on-primary': '#00ff00' } } },
+        },
+        outputDir,
+      })
+
+      expect(ok).toBe(true)
+      const writtenSvgContent = fs.readFileSync(path.join(outputDir, 'favicon.svg'), 'utf8')
+      // Background still uses primary.
+      expect(writtenSvgContent).toContain('fill="#ff00aa"')
+      // Foreground (the letter) now uses on-primary instead of the default white.
+      expect(writtenSvgContent).toContain('fill="#00ff00"')
+      expect(writtenSvgContent).not.toContain('fill="#ffffff"')
+    })
+
+    it('falls back to the default foreground (#ffffff) when on-primary is not configured', async () => {
+      const outputDir = path.join(tmpDir, 'output-fg-default')
+
+      const ok = await generateFavicons({
+        contentDir: tmpDir,
+        config: {
+          site: { favicon: '', name: 'Acme' },
+          themes: { light: { colors: { primary: '#ff00aa' } } },
+        },
+        outputDir,
+      })
+
+      expect(ok).toBe(true)
+      const writtenSvgContent = fs.readFileSync(path.join(outputDir, 'favicon.svg'), 'utf8')
+      // Foreground falls back to DEFAULT_MONOGRAM_FG (#ffffff) since on-primary is absent.
+      expect(writtenSvgContent).toContain('fill="#ffffff"')
+    })
+
     it('uses the configured custom source svg verbatim', async () => {
       const outputDir = path.join(tmpDir, 'output')
       const customSvg =

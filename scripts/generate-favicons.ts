@@ -67,7 +67,7 @@ export interface GenerateFaviconsOptions {
   contentDir?: string
   config?: {
     site?: { favicon?: string; name?: string }
-    themes?: { light?: { colors?: { primary?: string } } }
+    themes?: { light?: { colors?: { primary?: string; 'on-primary'?: string } } }
   }
   configPath?: string
   outputDir?: string
@@ -106,7 +106,8 @@ export async function generateFavicons(options: GenerateFaviconsOptions = {}): P
     svgBuffer = await fs.readFile(sourcePath)
   } else {
     const bgColor = config.themes?.light?.colors?.primary ?? DEFAULT_MONOGRAM_BG
-    const svgString = buildMonogramSvg(siteName, bgColor)
+    const fgColor = config.themes?.light?.colors?.['on-primary'] ?? DEFAULT_MONOGRAM_FG
+    const svgString = buildMonogramSvg(siteName, bgColor, fgColor)
     console.log(`🎨 Generating favicons for site: ${siteName}`)
     console.log(`ℹ️ No favicon configured — generating monogram from site name "${siteName}".`)
     console.log(`   Output: ${publicDir}`)

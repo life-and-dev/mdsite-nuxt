@@ -85,6 +85,18 @@ export default defineNuxtConfig({
 
   vite: {
     build: {
+      // EXPECTED BUILD WARNING — safe to ignore:
+      // Nuxt emits `[plugin nuxt:module-preload-polyfill] Sourcemap is likely
+      // to be incorrect: a plugin (nuxt:module-preload-polyfill) was used to
+      // transform files, but didn't generate a sourcemap for the transformation.`
+      // during `nuxi generate`. This is expected and cosmetic: the
+      // module-preload-polyfill plugin transforms output without emitting a
+      // sourcemap, which only affects source-map accuracy in dev tooling. The
+      // generated `.output/` static assets are correct. There is no clean
+      // config knob to silence it; suppressing it risks masking real future
+      // Node-in-browser bugs, so we leave it.
+      // Raise the default 500 kB limit so the baseline Nuxt bundle doesn't trip a noisy "chunks larger than 500 kB" warning during `mdsite generate`.
+      chunkSizeWarningLimit: 1000,
       // Disable esbuild CSS minify because it drops semicolons from nested Vuetify @layer rules, causing noisy warnings.
       cssMinify: false,
       rollupOptions: {

@@ -111,6 +111,16 @@ export function toFooterLinks(result: unknown): FooterLink[] {
  *     hook, before prerender starts).
  */
 async function readFooterLinksFromDisk(): Promise<FooterLink[]> {
+  // EXPECTED BUILD WARNING — safe to ignore:
+  // Vite emits `[plugin vite:resolve] Module "node:fs/promises" has been
+  // externalized for browser compatibility` (and the same for `node:path`).
+  // This is expected. These dynamic imports sit behind the `import.meta.server`
+  // guard in `loadFooterLinks`, which is a compile-time constant — Vite/Rollup
+  // strip the entire branch from the client bundle, so neither module ever
+  // reaches the browser. The warning is Vite's conservative static-analysis
+  // heuristic; it cannot prove the dynamic import is dead code. The browser
+  // path fetches `/_footer.json` via HTTP instead. See the header comment at
+  // the top of this file for the full rationale.
   const { readFile } = await import('node:fs/promises')
   const { resolve } = await import('node:path')
   const publicDir = process.env.MDSITE_PUBLIC_DIR

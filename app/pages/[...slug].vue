@@ -3,9 +3,6 @@
     <div v-if="pending" class="text-center py-8">
       <v-progress-circular indeterminate color="primary"></v-progress-circular>
     </div>
-    <div v-else-if="!page">
-      <v-alert type="error">Page not found</v-alert>
-    </div>
     <div v-else>
       <div class="content-body">
         <ContentRenderer :value="page" />
@@ -26,6 +23,21 @@ const { data: page, pending } = await useAsyncData(
   () => queryCollection('content').path(route.path).first(),
   { server: true }
 )
+
+// When no content matches the route, throw a fatal 404 so that:
+//  - SSR/dev shows the Nuxt error page with a real 404 status
+//  - `nuxi generate` (with crawlLinks) SKIPS the route instead of writing
+//    a 200-OK "Page not found" HTML file. This prevents phantom routes
+//    discovered by crawling relative links (e.g. ../package.json) from
+//    being written to disk as directories that collide with reserved
+//    filenames and break `npx serve` during preview.
+if (!page.value) {
+  throw createError({
+    statusCode: 404,
+    statusMessage: 'Page not found',
+    fatal: true,
+  })
+}
 
 const siteConfig = useSiteConfig()
 const title = page.value?.title || 'Page'

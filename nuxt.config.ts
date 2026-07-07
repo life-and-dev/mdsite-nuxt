@@ -65,6 +65,46 @@ export default defineNuxtConfig({
     // renderer (e.g. running `nuxt generate` by hand for renderer dev).
     output: {
       dir: process.env.MDSITE_NITRO_OUTPUT_DIR || '.output'
+    },
+    // `nuxi generate` defaults nitro.prerender.failOnError to true, which
+    // exits non-zero on ANY prerendered route that errors (404 or 500).
+    // For a static site generator, broken-content-link 404s must NOT abort
+    // the build. We keep failOnError false and surface every failed route
+    // (with its status code) via the prerender:done warning below, so real
+    // 500-class errors stay visible without failing the build.
+    prerender: {
+      failOnError: false,
+    },
+    // Surface broken/errored links discovered while crawling (default
+    // crawlLinks: true) WITHOUT failing the build (see failOnError above).
+    // The catch-all page throws a fatal 404 for routes with no matching
+    // content; Nitro skips writing them and lists them in failedRoutes.
+    // We print a clear [mdsite]-prefixed warning so authors notice dead
+    // links (common cause: relative links escaping the content dir, e.g.
+    // ../package.json) AND so genuine non-404 errors stay visible.
+    hooks: {
+      'prerender:done'(result) {
+        const failed = result.failedRoutes ?? []
+        if (!failed.length) return
+        const broken = failed.filter((r) => r.error?.statusCode === 404)
+        const errored = failed.filter((r) => r.error?.statusCode !== 404)
+        console.warn('')
+        console.warn(`[mdsite] ⚠ ${failed.length} route(s) skipped during prerender:`)
+        for (const r of failed) {
+          const code = r.error?.statusCode ?? 'ERR'
+          const msg = r.error?.statusMessage ?? ''
+          console.warn(`[mdsite]   ${r.route}  →  ${code}${msg ? ' ' + msg : ''}`)
+        }
+        if (broken.length) {
+          console.warn(`[mdsite] ${broken.length} broken link(s): markdown links to a path with no content.`)
+          console.warn('[mdsite] Common cause: relative links escaping the content dir (e.g. ../package.json, ../README.md).')
+        }
+        if (errored.length) {
+          console.warn(`[mdsite] ${errored.length} route(s) errored (non-404) — check the build log above for stack traces.`)
+        }
+        console.warn('[mdsite] These routes were not written to the generated site.')
+        console.warn('')
+      }
     }
   },
 

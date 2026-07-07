@@ -26,11 +26,22 @@ export type ResolvedFaviconSource =
 export function resolveFaviconSource(
   contentDir: string,
   favicon: string,
-): ResolvedFaviconSource | null {
+  configDir?: string,
+): ResolvedFaviconSource {
   if (typeof favicon === 'string' && favicon.trim().length > 0) {
-    const candidate = path.resolve(contentDir, favicon)
-    if (fs.pathExistsSync(candidate)) {
-      return { kind: 'file', sourcePath: candidate }
+    // 1. Relative to the input dir (contentDir) — what `mdsite init` writes.
+    const inContentDir = path.resolve(contentDir, favicon)
+    if (fs.pathExistsSync(inContentDir)) {
+      return { kind: 'file', sourcePath: inContentDir }
+    }
+    // 2. Relative to the config dir (project root, where mdsite.yml lives) —
+    //    consistent with how paths.input/build/output resolve; supports
+    //    hand-written paths like "docs/favicon.png".
+    if (configDir) {
+      const inConfigDir = path.resolve(configDir, favicon)
+      if (fs.pathExistsSync(inConfigDir)) {
+        return { kind: 'file', sourcePath: inConfigDir }
+      }
     }
   }
 
@@ -58,6 +69,7 @@ export interface GenerateFaviconsOptions {
     site?: { favicon?: string; name?: string }
     themes?: { light?: { colors?: { primary?: string } } }
   }
+  configPath?: string
   outputDir?: string
 }
 
@@ -66,16 +78,19 @@ export interface GenerateFaviconsOptions {
  */
 export async function generateFavicons(options: GenerateFaviconsOptions = {}): Promise<boolean> {
   const resolved = options.contentDir && options.config
-    ? { contentDir: options.contentDir, config: options.config }
+    ? { contentDir: options.contentDir, config: options.config, configPath: options.configPath }
     : loadMdsiteConfigSync()
-  const { contentDir, config } = resolved
+  const { contentDir, config, configPath } = resolved
   const siteName = config.site?.name ?? 'site'
+  const favicon = config.site?.favicon ?? ''
+  const configDir = configPath ? path.dirname(configPath) : undefined
 
-  const resolvedSource = resolveFaviconSource(contentDir, config.site?.favicon ?? '')
+  const resolvedSource = resolveFaviconSource(contentDir, favicon, configDir)
 
-  if (!resolvedSource) {
-    console.error('❌ No favicon source available.')
-    return false
+  if (resolvedSource.kind === 'monogram' && favicon.trim().length > 0) {
+    const tried = [path.resolve(contentDir, favicon)]
+    if (configDir) tried.push(path.resolve(configDir, favicon))
+    console.warn(`⚠️ Configured favicon "${favicon}" not found (tried: ${tried.join(', ')}). Falling back to monogram.`)
   }
 
   const publicDir = options.outputDir ?? path.resolve(__dirname, '..', 'public')

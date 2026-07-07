@@ -52,6 +52,31 @@ describe('generate-favicons', () => {
 
       expect(result).toEqual({ kind: 'monogram' })
     })
+
+    it('resolves a favicon written relative to the config dir (project root) when not found under the content dir', () => {
+      // tmpDir is the project root; tmpDir/docs is the content dir;
+      // the file lives at tmpDir/docs/favicon.png (i.e. docs/favicon.png from the root).
+      const contentDir = path.join(tmpDir, 'docs')
+      fs.mkdirSync(contentDir, { recursive: true })
+      const absPath = path.join(contentDir, 'favicon.png')
+      fs.writeFileSync(absPath, 'png-bytes', 'utf8')
+
+      const result = resolveFaviconSource(contentDir, 'docs/favicon.png', tmpDir)
+
+      expect(result).toEqual({ kind: 'file', sourcePath: absPath })
+    })
+
+    it('prefers the content-dir resolution when the file exists under both bases', () => {
+      // Both tmpDir/favicon.png (content-dir, since contentDir === tmpDir)
+      // and tmpDir/favicon.png (config-dir, since configDir === tmpDir) resolve
+      // to the same path; ensure content-dir wins when both candidates exist.
+      const absPath = path.join(tmpDir, 'favicon.png')
+      fs.writeFileSync(absPath, 'png-bytes', 'utf8')
+
+      const result = resolveFaviconSource(tmpDir, 'favicon.png', tmpDir)
+
+      expect(result).toEqual({ kind: 'file', sourcePath: absPath })
+    })
   })
 
   describe('buildMonogramSvg', () => {
@@ -151,6 +176,43 @@ describe('generate-favicons', () => {
       const writtenSvgContent = fs.readFileSync(path.join(outputDir, 'favicon.svg'), 'utf8')
       expect(writtenSvgContent).toBe(customSvg)
       // The custom user source must not be replaced with the monogram template.
+      expect(writtenSvgContent).not.toContain('dominant-baseline="central"')
+    })
+
+    it('resolves a favicon written relative to the config dir (project root) via configPath', async () => {
+      // tmpDir acts as the project root; tmpDir/docs is the content dir;
+      // the file lives at tmpDir/docs/favicon.svg (i.e. docs/favicon.svg
+      // from the root). configPath points at a dummy mdsite.yml inside
+      // tmpDir so configDir is derived as tmpDir.
+      const projectRoot = tmpDir
+      const contentDir = path.join(projectRoot, 'docs')
+      fs.mkdirSync(contentDir, { recursive: true })
+
+      const customSvg =
+        '<?xml version="1.0" encoding="UTF-8"?>' +
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">' +
+        '<rect width="16" height="16" fill="green"/></svg>'
+      const userFilePath = path.join(contentDir, 'favicon.svg')
+      fs.writeFileSync(userFilePath, customSvg, 'utf8')
+
+      // Dummy mdsite.yml — only its dirname (projectRoot) is consumed here.
+      const configPath = path.join(projectRoot, 'mdsite.yml')
+      fs.writeFileSync(configPath, '', 'utf8')
+
+      const outputDir = path.join(projectRoot, 'output')
+
+      const ok = await generateFavicons({
+        contentDir,
+        config: { site: { favicon: 'docs/favicon.svg', name: 'Docs' } },
+        configPath,
+        outputDir,
+      })
+
+      expect(ok).toBe(true)
+
+      const writtenSvgContent = fs.readFileSync(path.join(outputDir, 'favicon.svg'), 'utf8')
+      expect(writtenSvgContent).toBe(customSvg)
+      // Must not fall back to the monogram template.
       expect(writtenSvgContent).not.toContain('dominant-baseline="central"')
     })
   })

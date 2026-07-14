@@ -42,6 +42,24 @@ function getSourceDir(): string {
 }
 
 /**
+ * Resolve the path to mdsite.yml. Prefers the MDSITE_CONFIG_PATH env var
+ * (set by the CLI) and otherwise checks <sourceDir>/../mdsite.yml then
+ * <sourceDir>/mdsite.yml so the watcher targets the same file the menu
+ * loader reads from.
+ */
+function getMdsiteConfigPath(): string {
+    if (process.env.MDSITE_CONFIG_PATH) {
+        return process.env.MDSITE_CONFIG_PATH
+    }
+    const sourceDir = getSourceDir()
+    const parentCandidate = path.join(sourceDir, '..', 'mdsite.yml')
+    if (fs.existsSync(parentCandidate)) {
+        return parentCandidate
+    }
+    return path.join(sourceDir, 'mdsite.yml')
+}
+
+/**
  * Get target public directory
  */
 function getTargetDir(): string {
@@ -204,7 +222,10 @@ export async function startWatcher() {
     console.log(`👀 Watching images and markdown in: ${sourceDir}`)
     console.log(`👀 Target directory: ${targetDir}\n`)
 
+    const mdsiteConfigPath = getMdsiteConfigPath()
+
     const patterns = [
+        mdsiteConfigPath,
         ...IMAGE_EXTS.map(ext => `${sourceDir}/**/*.${ext}`),
         `${sourceDir}/**/*.md`            // Watch all markdown files
     ]
@@ -212,8 +233,13 @@ export async function startWatcher() {
     // Skip build/dependency directories (see `isExcludedSourceDir`). The
     // matcher inspects every path segment so a hidden dir or
     // `node_modules`/`dist` nested anywhere under the content dir is
-    // ignored, regardless of depth.
+    // ignored, regardless of depth. The mdsite.yml config file is
+    // exempt so the watcher always picks up menu edits even if the
+    // config lives inside a hidden directory.
     const ignored = (filePath: string, stats?: { isDirectory?: () => boolean }) => {
+        if (mdsiteConfigPath && path.resolve(filePath) === path.resolve(mdsiteConfigPath)) {
+            return false
+        }
         if (stats?.isDirectory && stats.isDirectory()) {
             return isExcludedSourceDir(path.basename(filePath))
         }
@@ -233,6 +259,11 @@ export async function startWatcher() {
 
     watcher
         .on('add', (filePath) => {
+            if (mdsiteConfigPath && path.resolve(filePath) === path.resolve(mdsiteConfigPath)) {
+                console.log('📑 mdsite.yml changed, regenerating navigation...')
+                regenerateNavigation()
+                return
+            }
             const fileName = path.basename(filePath)
             if (fileName.endsWith('.md')) {
                 // Markdown file added - regenerate both navigation and search
@@ -245,6 +276,11 @@ export async function startWatcher() {
             }
         })
         .on('change', (filePath) => {
+            if (mdsiteConfigPath && path.resolve(filePath) === path.resolve(mdsiteConfigPath)) {
+                console.log('📑 mdsite.yml changed, regenerating navigation...')
+                regenerateNavigation()
+                return
+            }
             const fileName = path.basename(filePath)
             if (fileName.endsWith('.md')) {
                 // Markdown file changed - regenerate both navigation and search
@@ -257,6 +293,10 @@ export async function startWatcher() {
             }
         })
         .on('unlink', (filePath) => {
+            if (mdsiteConfigPath && path.resolve(filePath) === path.resolve(mdsiteConfigPath)) {
+                console.log(`📑 mdsite.yml removed: ${path.basename(filePath)}`)
+                return
+            }
             const fileName = path.basename(filePath)
             if (fileName.endsWith('.md')) {
                 // Markdown file deleted - regenerate both navigation and search

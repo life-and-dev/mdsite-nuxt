@@ -416,25 +416,26 @@ async function tryReadLegacyMenuFile(menuPath: string): Promise<MdsiteMenuItem[]
 
 /**
  * Layered menu lookup. Tries, in order:
- *   1. <sourceDir>/_menu.yml
- *   2. <sourceDir>/_menu.yaml
- *   3. MDSITE_CONFIG_PATH env var (parsed as wrapped { menu: [...] })
- *   4. <sourceDir>/../mdsite.yml
- *   5. <sourceDir>/mdsite.yml
+ *   1. MDSITE_CONFIG_PATH env var (parsed as wrapped { menu: [...] })
+ *   2. <sourceDir>/mdsite.yml
+ *   3. <sourceDir>/../mdsite.yml
+ *   4. <sourceDir>/_menu.yml  (legacy fallback)
+ *   5. <sourceDir>/_menu.yaml (legacy fallback)
+ * Canonical mdsite.yml wins over legacy _menu.yml so the CLI's one-config
+ * model is honored and leftover _menu.yml files don't silently override it.
  * Returns the first non-empty menu array, or null if none resolve to a menu.
  */
 async function loadMenuConfig(sourceDir: string): Promise<MdsiteMenuItem[] | null> {
-    const candidates: { path: string, isLegacy: boolean }[] = [
-        { path: path.join(sourceDir, '_menu.yml'), isLegacy: true },
-        { path: path.join(sourceDir, '_menu.yaml'), isLegacy: true }
-    ]
+    const candidates: { path: string, isLegacy: boolean }[] = []
 
     if (process.env.MDSITE_CONFIG_PATH) {
         candidates.push({ path: process.env.MDSITE_CONFIG_PATH, isLegacy: false })
     }
 
-    candidates.push({ path: path.join(sourceDir, '..', 'mdsite.yml'), isLegacy: false })
     candidates.push({ path: path.join(sourceDir, 'mdsite.yml'), isLegacy: false })
+    candidates.push({ path: path.join(sourceDir, '..', 'mdsite.yml'), isLegacy: false })
+    candidates.push({ path: path.join(sourceDir, '_menu.yml'), isLegacy: true })
+    candidates.push({ path: path.join(sourceDir, '_menu.yaml'), isLegacy: true })
 
     for (const candidate of candidates) {
         const menu = candidate.isLegacy
@@ -757,7 +758,7 @@ export async function generateNavigationJson() {
             const result = await processMenuItems(menuItems, '/')
             tree = result.nodes
         } else {
-            console.warn('⚠️ No menu found in _menu.yml, _menu.yaml, MDSITE_CONFIG_PATH, or mdsite.yml (source: ' + sourceDir + ')')
+            console.warn('⚠️ No menu found in MDSITE_CONFIG_PATH, mdsite.yml, _menu.yml, or _menu.yaml (source: ' + sourceDir + ')')
         }
     } catch (error) {
         console.error('Error building navigation tree:', error)

@@ -182,14 +182,14 @@ describe('generated content indices', () => {
       ])
     })
 
-    it('prefers _menu.yml over mdsite.yml when both exist (legacy precedence)', async () => {
+    it('prefers mdsite.yml over _menu.yml when both exist (canonical config wins)', async () => {
       await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n\nWelcome.', 'utf8')
       await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nContent.', 'utf8')
       await fs.writeFile(path.join(contentDir, 'about.md'), '# About\n\nAbout.', 'utf8')
 
       // Legacy _menu.yml lists only index + guide
       await fs.writeFile(path.join(contentDir, '_menu.yml'), '- index\n- guide\n', 'utf8')
-      // mdsite.yml in same content dir would otherwise list index + about
+      // Canonical mdsite.yml in same content dir lists index + about and must win
       await fs.writeFile(path.join(contentDir, 'mdsite.yml'), [
         'menu:',
         '  - index',
@@ -202,9 +202,9 @@ describe('generated content indices', () => {
 
       const navigation = await readNavigation()
       const paths = navigation.map((n: { path: string }) => n.path)
-      expect(paths).toEqual(['/', '/guide'])
-      // about.md is not in the legacy menu, so it should not appear
-      expect(navigation.find((n: { path: string }) => n.path === '/about')).toBeUndefined()
+      expect(paths).toEqual(['/', '/about'])
+      // guide.md is not in the canonical menu, so the legacy _menu.yml must not override
+      expect(navigation.find((n: { path: string }) => n.path === '/guide')).toBeUndefined()
     })
 
     it('skips mdsite.yml candidates that have no menu key and falls through to a later candidate', async () => {

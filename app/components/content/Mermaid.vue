@@ -10,6 +10,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { useTheme } from 'vuetify'
 
 const props = defineProps({
   code: {
@@ -21,6 +22,24 @@ const props = defineProps({
 const svg = ref('')
 const container = ref<HTMLElement | null>(null)
 
+const theme = useTheme()
+
+// Build mermaid themeVariables from the active Vuetify theme's hex colors.
+// Vuetify exposes colors reactively via theme.current.value.colors; this
+// re-runs on every render so toggling light/dark picks up the new palette.
+const buildMermaidThemeVariables = () => {
+  const colors = theme.current.value.colors
+  return {
+    primaryColor: colors.primary,
+    primaryTextColor: colors['on-primary'],
+    primaryBorderColor: colors.primary,
+    lineColor: colors['on-surface'],
+    textColor: colors['on-surface'],
+    secondaryColor: colors.secondary,
+    tertiaryColor: colors.surface
+  }
+}
+
 const renderDiagram = async () => {
   if (process.server) return
 
@@ -29,14 +48,7 @@ const renderDiagram = async () => {
     mermaid.initialize({
       startOnLoad: false,
       theme: 'base',
-      themeVariables: {
-        primaryColor: '#6200ee',
-        primaryTextColor: '#fff',
-        primaryBorderColor: '#6200ee',
-        lineColor: '#6200ee',
-        secondaryColor: '#03dac6',
-        tertiaryColor: '#f5f5f5'
-      },
+      themeVariables: buildMermaidThemeVariables(),
       securityLevel: 'loose',
       fontFamily: 'Noto Sans, sans-serif'
     })
@@ -57,6 +69,13 @@ onMounted(() => {
 watch(() => props.code, () => {
   renderDiagram()
 })
+
+// Re-render when the active Vuetify theme definition changes (light <-> dark
+// toggle or programmatic theme swap). `deep: true` because the colors object
+// is replaced wholesale on theme change.
+watch(() => theme.current.value, () => {
+  renderDiagram()
+}, { deep: true })
 </script>
 
 <style scoped>

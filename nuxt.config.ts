@@ -124,6 +124,13 @@ export default defineNuxtConfig({
   content: {},
 
   vite: {
+    optimizeDeps: {
+      include: [
+        '@vue/devtools-core',
+        '@vue/devtools-kit',
+        'mermaid'
+      ]
+    },
     build: {
       // EXPECTED BUILD WARNING — safe to ignore:
       // Nuxt emits `[plugin nuxt:module-preload-polyfill] Sourcemap is likely

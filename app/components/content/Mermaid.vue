@@ -12,6 +12,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useTheme } from 'vuetify'
 import { initializeMermaid, watchMermaidTheme } from '../../utils/mermaid-theme'
+import { runAfterDocumentFontsReady } from './mermaid-fonts'
 
 const props = defineProps({
   code: {
@@ -27,24 +28,29 @@ const theme = useTheme()
 let isMounted = false
 let latestRender = 0
 
-const renderDiagram = async () => {
+const renderDiagram = async (): Promise<void> => {
   if (process.server) return
 
   const renderNumber = ++latestRender
 
-  try {
-    const mermaid = (await import('mermaid')).default
-    initializeMermaid(mermaid, theme.current.value.colors)
+  await runAfterDocumentFontsReady(document, async () => {
+    if (!isMounted || renderNumber !== latestRender) return
 
-    const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`
-    const { svg: renderedSvg } = await mermaid.render(id, props.code)
-    if (!isMounted || renderNumber !== latestRender) return
-    svg.value = renderedSvg
-  } catch (error) {
-    if (!isMounted || renderNumber !== latestRender) return
-    console.error('Mermaid rendering failed:', error)
-    svg.value = `<div class="error">Failed to render diagram: ${error}</div>`
-  }
+    try {
+      const mermaid = (await import('mermaid')).default
+      if (!isMounted || renderNumber !== latestRender) return
+      initializeMermaid(mermaid, theme.current.value.colors)
+
+      const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`
+      const { svg: renderedSvg } = await mermaid.render(id, props.code)
+      if (!isMounted || renderNumber !== latestRender) return
+      svg.value = renderedSvg
+    } catch (error) {
+      if (!isMounted || renderNumber !== latestRender) return
+      console.error('Mermaid rendering failed:', error)
+      svg.value = `<div class="error">Failed to render diagram: ${error}</div>`
+    }
+  })
 }
 
 onMounted(() => {
@@ -96,9 +102,11 @@ onUnmounted(() => {
 }
 
 :deep(svg) {
+  display: block;
   width: 100%;
   max-width: 100%;
   height: auto;
+  margin-inline: auto;
 }
 
 .error {

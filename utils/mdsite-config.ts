@@ -65,7 +65,7 @@ export interface MdsiteConfig {
   }
   menu: MdsiteMenuItem[]
   paths: {
-    ignore: string | string[]
+    ignore: string[]
     input: string
     build: string
     output: string
@@ -91,7 +91,19 @@ export interface LoadedMdsiteConfig {
   contentDir: string
 }
 
+interface RawMdsiteConfig {
+  features?: Record<string, unknown> & { 'bible-tooltips'?: boolean, footer?: unknown }
+  menu?: unknown
+  paths?: { ignore?: unknown, input?: unknown, build?: unknown, output?: unknown }
+  site?: { canonical?: unknown, favicon?: unknown, name?: unknown }
+  themes?: {
+    light?: { colors?: Record<string, string> }
+    dark?: { colors?: Record<string, string> }
+  }
+}
+
 const configFileName = 'mdsite.yml';
+const defaultIgnorePatterns = ['AGENTS.md', 'CLAUDE.md']
 
 const defaultLightColors = {
   primary: '#0969da',
@@ -165,7 +177,7 @@ export function loadMdsiteConfigSync(options: {
   }
 
   const rawText = fs.readFileSync(configPath, 'utf8');
-  const parsed = YAML.parse(rawText) ?? {};
+  const parsed = (YAML.parse(rawText) ?? {}) as RawMdsiteConfig;
   const contentDir = resolveContentDir(options, configPath, parsed);
 
   return {
@@ -207,7 +219,7 @@ export function resolveContentDir(options: {
   configPath?: string
   contentPath?: string
   searchFrom?: string
-} = {}, resolvedConfigPath?: string, rawConfig: Record<string, any> = {}): string {
+} = {}, resolvedConfigPath?: string, rawConfig: RawMdsiteConfig = {}): string {
   if (options.contentPath) {
     return path.resolve(options.contentPath);
   }
@@ -275,7 +287,7 @@ function createDefaultMdsiteConfig(siteName: string): MdsiteConfig {
     },
     menu: [],
     paths: {
-      ignore: [],
+      ignore: [...defaultIgnorePatterns],
       input: '',
       build: '.mdsite',
       output: '.output'
@@ -296,7 +308,7 @@ function createDefaultMdsiteConfig(siteName: string): MdsiteConfig {
   };
 }
 
-function normalizeMdsiteConfig(rawConfig: Record<string, any>, contentDir: string): MdsiteConfig {
+function normalizeMdsiteConfig(rawConfig: RawMdsiteConfig, contentDir: string): MdsiteConfig {
   const fallbackConfig = createDefaultMdsiteConfig(path.basename(contentDir) || 'Site');
   const inputPath = resolveInputConfigPath(rawConfig.paths?.input);
 
@@ -312,9 +324,7 @@ function normalizeMdsiteConfig(rawConfig: Record<string, any>, contentDir: strin
     },
     menu: Array.isArray(rawConfig.menu) ? rawConfig.menu : fallbackConfig.menu,
     paths: {
-      ignore: typeof rawConfig.paths?.ignore === 'string' || Array.isArray(rawConfig.paths?.ignore)
-        ? rawConfig.paths.ignore
-        : fallbackConfig.paths.ignore,
+      ignore: normalizeIgnoreConfig(rawConfig.paths?.ignore, fallbackConfig.paths.ignore),
       input: inputPath ?? fallbackConfig.paths.input,
       build: typeof rawConfig.paths?.build === 'string' ? rawConfig.paths.build : fallbackConfig.paths.build,
       output: typeof rawConfig.paths?.output === 'string' ? rawConfig.paths.output : fallbackConfig.paths.output
@@ -339,4 +349,29 @@ function normalizeMdsiteConfig(rawConfig: Record<string, any>, contentDir: strin
       }
     }
   };
+}
+
+function normalizeIgnoreConfig(value: unknown, fallback: string[]): string[] {
+  if (value === undefined) return [...fallback]
+  const patterns = typeof value === 'string' ? [value] : value
+  if (!Array.isArray(patterns) || !patterns.every((item): item is string => typeof item === 'string')) {
+    throw new Error('paths.ignore must be a string or an array of strings.')
+  }
+  return patterns.map(normalizeIgnorePattern)
+}
+
+function normalizeIgnorePattern(pattern: string): string {
+  const normalized = pattern.trim()
+  if (
+    !normalized
+    || normalized.startsWith('!')
+    || normalized.includes('\0')
+    || normalized.includes('\\')
+    || normalized === '..'
+    || normalized.startsWith('../')
+    || normalized.includes('/../')
+  ) {
+    throw new Error(`Invalid paths.ignore pattern: ${JSON.stringify(pattern)}.`)
+  }
+  return normalized.replace(/^\.\//, '')
 }

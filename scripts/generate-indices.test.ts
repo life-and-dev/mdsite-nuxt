@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { generateNavigationJson, generateSearchIndexJson, generateFooterJson } from './generate-indices.js'
+import { buildContentData, generateNavigationJson, generateSearchIndexJson, generateFooterJson } from './generate-indices.js'
 
 describe('generated content indices', () => {
   const originalEnv = { ...process.env }
@@ -53,6 +53,41 @@ describe('generated content indices', () => {
         title: 'Guide',
       }),
     ])
+  })
+
+  it('keeps default internal files out of all generated metadata', async () => {
+    await fs.mkdir(path.join(contentDir, 'nested'), { recursive: true })
+    await fs.writeFile(path.join(contentDir, 'AGENTS.md'), '# Agent Secret\n\nagent-only metadata', 'utf8')
+    await fs.writeFile(path.join(contentDir, 'nested', 'CLAUDE.md'), '# Claude Secret\n\nclaude-only metadata', 'utf8')
+    await fs.writeFile(path.join(contentDir, 'README.md'), '# Project Readme\n\nPublished readme.', 'utf8')
+    await fs.writeFile(path.join(contentDir, 'guide.md'), '# Guide\n\nPublished guide.', 'utf8')
+    const mdsitePath = path.join(tempDir, 'mdsite.yml')
+    await fs.writeFile(mdsitePath, [
+      'menu:',
+      '  - AGENTS',
+      '  - nested/CLAUDE',
+      '  - README',
+      '  - guide',
+      'features:',
+      '  footer: [AGENTS, guide]',
+      ''
+    ].join('\n'), 'utf8')
+    process.env.MDSITE_CONFIG_PATH = mdsitePath
+
+    await buildContentData()
+
+    const navigationText = await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8')
+    const searchText = await fs.readFile(path.join(publicDir, '_search-index.json'), 'utf8')
+    const footerText = await fs.readFile(path.join(publicDir, '_footer.json'), 'utf8')
+    const generatedMetadata = `${navigationText}\n${searchText}\n${footerText}`
+    expect(generatedMetadata).not.toContain('Agent Secret')
+    expect(generatedMetadata).not.toContain('Claude Secret')
+    expect(generatedMetadata).not.toContain('agent-only metadata')
+    expect(generatedMetadata).not.toContain('claude-only metadata')
+    expect(generatedMetadata).toContain('Project Readme')
+    expect(generatedMetadata).toContain('Published readme.')
+    expect(generatedMetadata).toContain('Guide')
+    expect(generatedMetadata).toContain('Published guide.')
   })
 
   describe('index path normalization in navigation', () => {

@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
-import chokidar from 'chokidar'
+import chokidar, { type FSWatcher } from 'chokidar'
 import fs from 'fs-extra'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { createContentIgnore, matches } from '../utils/content-ignore.js'
+import { loadMdsiteConfigSync } from '../utils/mdsite-config.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -59,6 +61,24 @@ function getMdsiteConfigPath(): string {
     return path.join(sourceDir, 'mdsite.yml')
 }
 
+function getConfiguredContentIgnore(): ReturnType<typeof createContentIgnore> {
+    const sourceDir = getSourceDir()
+    const { config } = loadMdsiteConfigSync({
+        configPath: getMdsiteConfigPath(),
+        contentPath: sourceDir
+    })
+    return createContentIgnore(config.paths.ignore)
+}
+
+function isConfiguredIgnored(
+    contentIgnore: ReturnType<typeof createContentIgnore>,
+    filePath: string,
+    directory: boolean = false
+): boolean {
+    const relativePath = path.relative(getSourceDir(), filePath).replaceAll(path.sep, '/')
+    return matches(contentIgnore, directory ? `${relativePath}/` : relativePath)
+}
+
 /**
  * Get target public directory
  */
@@ -69,7 +89,7 @@ function getTargetDir(): string {
 /**
  * Regenerate navigation JSON with debouncing (5 second delay)
  */
-function regenerateNavigation() {
+function regenerateNavigation(): void {
     if (navigationDebounceTimer) {
         clearTimeout(navigationDebounceTimer)
     }
@@ -89,7 +109,7 @@ function regenerateNavigation() {
 /**
  * Regenerate search index JSON with debouncing (5 second delay)
  */
-function regenerateSearchIndex() {
+function regenerateSearchIndex(): void {
     if (searchDebounceTimer) {
         clearTimeout(searchDebounceTimer)
     }
@@ -109,7 +129,7 @@ function regenerateSearchIndex() {
 /**
  * Regenerate footer links JSON with debouncing (5 second delay)
  */
-function regenerateFooter() {
+function regenerateFooter(): void {
     if (footerDebounceTimer) {
         clearTimeout(footerDebounceTimer)
     }
@@ -129,7 +149,7 @@ function regenerateFooter() {
 /**
  * Generate navigation and search JSON files (one-time on startup)
  */
-export async function generateJsonFiles() {
+export async function generateJsonFiles(): Promise<void> {
     console.log('🔨 Generating JSON files...')
 
     try {
@@ -157,9 +177,10 @@ export async function generateJsonFiles() {
 /**
  * Copy all images from content to public directory (one-time)
  */
-export async function copyAllImages() {
+export async function copyAllImages(): Promise<void> {
     const sourceDir = getSourceDir()
     const targetDir = getTargetDir()
+    const contentIgnore = getConfiguredContentIgnore()
 
     console.log(`📦 Copying images from: ${sourceDir}`)
     console.log(`📦 Target directory: ${targetDir}`)
@@ -167,7 +188,7 @@ export async function copyAllImages() {
     let copiedCount = 0
 
     for (const ext of IMAGE_EXTS) {
-        const files = await getAllFiles(sourceDir, ext)
+        const files = await getAllFiles(sourceDir, ext, sourceDir, contentIgnore)
 
         for (const sourcePath of files) {
             await copyImage(sourcePath, false)
@@ -181,7 +202,7 @@ export async function copyAllImages() {
 /**
  * Clean public directory except static files
  */
-export async function cleanPublicDirectory() {
+export async function cleanPublicDirectory(): Promise<void> {
     const targetDir = getTargetDir()
 
     console.log(`🧹 Cleaning public directory...`)
@@ -206,7 +227,7 @@ export async function cleanPublicDirectory() {
 /**
  * Watch images and markdown files in content directory
  */
-export async function startWatcher() {
+export async function startWatcher(): Promise<FSWatcher> {
     const sourceDir = getSourceDir()
     const targetDir = getTargetDir()
 
@@ -223,6 +244,7 @@ export async function startWatcher() {
     console.log(`👀 Target directory: ${targetDir}\n`)
 
     const mdsiteConfigPath = getMdsiteConfigPath()
+    const contentIgnore = getConfiguredContentIgnore()
 
     const patterns = [
         mdsiteConfigPath,
@@ -230,8 +252,8 @@ export async function startWatcher() {
         `${sourceDir}/**/*.md`            // Watch all markdown files
     ]
 
-    // Skip build/dependency directories (see `isExcludedSourceDir`). The
-    // matcher inspects every path segment so a hidden dir or
+    // Skip draft Markdown and build/dependency directories separately from
+    // `paths.ignore`. The matcher inspects every path segment so a hidden dir or
     // `node_modules`/`dist` nested anywhere under the content dir is
     // ignored, regardless of depth. The mdsite.yml config file is
     // exempt so the watcher always picks up menu edits even if the
@@ -242,9 +264,12 @@ export async function startWatcher() {
         }
         if (stats?.isDirectory && stats.isDirectory()) {
             return isExcludedSourceDir(path.basename(filePath))
+                || isConfiguredIgnored(contentIgnore, filePath, true)
         }
         const segments = filePath.split(path.sep)
-        return segments.some((segment) => isExcludedSourceDir(segment))
+        return isDraftMarkdownPath(filePath)
+            || segments.some((segment) => isExcludedSourceDir(segment))
+            || isConfiguredIgnored(contentIgnore, filePath)
     }
 
     const watcher = chokidar.watch(patterns, {
@@ -260,8 +285,13 @@ export async function startWatcher() {
     watcher
         .on('add', (filePath) => {
             if (mdsiteConfigPath && path.resolve(filePath) === path.resolve(mdsiteConfigPath)) {
-                console.log('📑 mdsite.yml changed, regenerating navigation...')
+                console.log('📑 mdsite.yml changed, regenerating content metadata...')
                 regenerateNavigation()
+                regenerateSearchIndex()
+                regenerateFooter()
+                return
+            }
+            if (isDraftMarkdownPath(filePath)) {
                 return
             }
             const fileName = path.basename(filePath)
@@ -277,8 +307,13 @@ export async function startWatcher() {
         })
         .on('change', (filePath) => {
             if (mdsiteConfigPath && path.resolve(filePath) === path.resolve(mdsiteConfigPath)) {
-                console.log('📑 mdsite.yml changed, regenerating navigation...')
+                console.log('📑 mdsite.yml changed, regenerating content metadata...')
                 regenerateNavigation()
+                regenerateSearchIndex()
+                regenerateFooter()
+                return
+            }
+            if (isDraftMarkdownPath(filePath)) {
                 return
             }
             const fileName = path.basename(filePath)
@@ -295,6 +330,9 @@ export async function startWatcher() {
         .on('unlink', (filePath) => {
             if (mdsiteConfigPath && path.resolve(filePath) === path.resolve(mdsiteConfigPath)) {
                 console.log(`📑 mdsite.yml removed: ${path.basename(filePath)}`)
+                return
+            }
+            if (isDraftMarkdownPath(filePath)) {
                 return
             }
             const fileName = path.basename(filePath)
@@ -316,7 +354,7 @@ export async function startWatcher() {
 /**
  * One-time sync for production builds
  */
-export async function syncContent() {
+export async function syncContent(): Promise<void> {
     await cleanPublicDirectory()
     await copyAllImages()
     await generateJsonFiles()
@@ -339,7 +377,7 @@ function getPublicPath(sourcePath: string): { relativePath: string, targetPath: 
 /**
  * Copy a single image from content to public
  */
-async function copyImage(sourcePath: string, log: boolean = true, action: string = 'copied') {
+async function copyImage(sourcePath: string, log: boolean = true, action: string = 'copied'): Promise<void> {
     try {
         if (await isDraftOnlyImage(sourcePath)) {
             if (log) {
@@ -365,7 +403,7 @@ async function copyImage(sourcePath: string, log: boolean = true, action: string
 /**
  * Delete image from public directory
  */
-async function deleteImage(sourcePath: string) {
+async function deleteImage(sourcePath: string): Promise<void> {
     try {
         if (await isDraftOnlyImage(sourcePath)) {
             const fileName = path.basename(sourcePath)
@@ -434,11 +472,20 @@ function isExcludedSourceDir(name: string): boolean {
     return name.startsWith('.') || name === 'node_modules' || name === 'dist'
 }
 
+function isDraftMarkdownPath(filePath: string): boolean {
+    return path.basename(filePath).endsWith('.draft.md')
+}
+
 /**
  * Get all files with specific extension recursively, skipping
  * build/dependency directories (see `isExcludedSourceDir`).
  */
-async function getAllFiles(dir: string, ext: string): Promise<string[]> {
+async function getAllFiles(
+    dir: string,
+    ext: string,
+    sourceDir: string,
+    contentIgnore: ReturnType<typeof createContentIgnore>
+): Promise<string[]> {
     const files: string[] = []
 
     if (!await fs.pathExists(dir)) {
@@ -452,12 +499,16 @@ async function getAllFiles(dir: string, ext: string): Promise<string[]> {
         const stat = await fs.stat(itemPath)
 
         if (stat.isDirectory()) {
-            if (isExcludedSourceDir(item)) {
+            const relativeDir = path.relative(sourceDir, itemPath).replaceAll(path.sep, '/')
+            if (isExcludedSourceDir(item) || matches(contentIgnore, `${relativeDir}/`)) {
                 continue
             }
-            const subFiles = await getAllFiles(itemPath, ext)
+            const subFiles = await getAllFiles(itemPath, ext, sourceDir, contentIgnore)
             files.push(...subFiles)
-        } else if (item.toLowerCase().endsWith(`.${ext}`)) {
+        } else if (
+            item.toLowerCase().endsWith(`.${ext}`)
+            && !matches(contentIgnore, path.relative(sourceDir, itemPath).replaceAll(path.sep, '/'))
+        ) {
             files.push(itemPath)
         }
     }

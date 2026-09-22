@@ -1,7 +1,9 @@
 import { defineCollection, defineContentConfig } from '@nuxt/content'
+import { createContentIgnore, toNuxtExcludes } from './utils/content-ignore.js'
 import { loadMdsiteConfigSync } from './utils/mdsite-config.js'
 
-const { contentDir } = loadMdsiteConfigSync()
+const { config, contentDir } = loadMdsiteConfigSync()
+const configuredExcludes = toNuxtExcludes(createContentIgnore(config.paths.ignore))
 
 /**
  * Build/dependency directories that should never be crawled as content.
@@ -30,7 +32,7 @@ export default defineContentConfig({
       source: {
         cwd: contentDir,
         include: '**/*.md',
-        exclude: [...excludedSourcePatterns, '**/*.draft.md'],
+        exclude: [...excludedSourcePatterns, '**/*.draft.md', ...configuredExcludes],
         prefix: '/'
       }
     })

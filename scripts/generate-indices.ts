@@ -4,6 +4,8 @@ import fs from 'fs-extra'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { parse as parseYaml } from 'yaml'
+import { createContentIgnore, matches } from '../utils/content-ignore'
+import { loadMdsiteConfigSync } from '../utils/mdsite-config'
 import type { MdsiteFooterItem, MdsiteMenuItem } from '../utils/mdsite-config'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -92,6 +94,23 @@ function getMarkdownPath(relativePath: string): string {
     return path.join(sourceDir, `${relativePath}.md`)
 }
 
+function getConfiguredContentIgnore(sourceDir: string): ReturnType<typeof createContentIgnore> {
+    const parentConfigPath = path.join(sourceDir, '..', 'mdsite.yml')
+    const localConfigPath = path.join(sourceDir, 'mdsite.yml')
+    const configPath = process.env.MDSITE_CONFIG_PATH
+        ?? (fs.existsSync(parentConfigPath) ? parentConfigPath : localConfigPath)
+    const { config } = loadMdsiteConfigSync({ configPath, contentPath: sourceDir })
+    return createContentIgnore(config.paths.ignore)
+}
+
+function isIgnoredMarkdownPath(
+    contentIgnore: ReturnType<typeof createContentIgnore>,
+    resolvedPath: string
+): boolean {
+    const relativePath = resolvedPath.replace(/^\//, '').replace(/\.md$/, '')
+    return matches(contentIgnore, `${relativePath}.md`) || matches(contentIgnore, `${relativePath}/`)
+}
+
 // ----------------------------------------------------------------------------
 // NAVIGATION LOGIC
 // ----------------------------------------------------------------------------
@@ -166,7 +185,8 @@ function resolvePath(menuPath: string, contextPath: string): string {
 async function processMenuItems(
     items: MdsiteMenuItem[],
     contextPath: string,
-    order: number = 0
+    order: number = 0,
+    contentIgnore: ReturnType<typeof createContentIgnore> = getConfiguredContentIgnore(getSourceDir())
 ): Promise<{ nodes: MinimalTreeNode[], nextOrder: number }> {
     const nodes: MinimalTreeNode[] = []
 
@@ -199,6 +219,9 @@ async function processMenuItems(
 
             // String → lookup H1 and description from markdown file
             const resolvedPath = resolvePath(item, contextPath)
+            if (isIgnoredMarkdownPath(contentIgnore, resolvedPath)) {
+                continue
+            }
             const markdownPath = getMarkdownPath(resolvedPath)
 
             let title: string | null = null
@@ -269,6 +292,9 @@ async function processMenuItems(
                 // Handle submenu (array value) - key is markdown filename
                 if (Array.isArray(value)) {
                     const submenuPath = resolvePath(key, contextPath)
+                    if (isIgnoredMarkdownPath(contentIgnore, submenuPath)) {
+                        continue
+                    }
                     const markdownPath = getMarkdownPath(submenuPath)
 
                     let title: string | null = null
@@ -286,7 +312,7 @@ async function processMenuItems(
                     }
 
                     // Process children recursively
-                    const { nodes: childNodes } = await processMenuItems(value, submenuPath, 0)
+                    const { nodes: childNodes } = await processMenuItems(value, submenuPath, 0, contentIgnore)
 
                     nodes.push({
                         id: `${submenuPath.split('/').filter(Boolean).pop() || 'home'}-${order}`,
@@ -304,6 +330,9 @@ async function processMenuItems(
                 // Handle custom title with path (alias link)
                 if (typeof value === 'string') {
                     const resolvedPath = resolvePath(value, contextPath)
+                    if (isIgnoredMarkdownPath(contentIgnore, resolvedPath)) {
+                        continue
+                    }
                     const markdownPath = getMarkdownPath(resolvedPath)
                     let description: string | undefined = undefined
 
@@ -347,8 +376,11 @@ function countNodes(nodes: MinimalTreeNode[]): number {
     return count
 }
 
-async function buildFallbackNavigationTree(sourceDir: string): Promise<MinimalTreeNode[]> {
-    const markdownFiles = await getAllMarkdownFiles(sourceDir)
+async function buildFallbackNavigationTree(
+    sourceDir: string,
+    contentIgnore: ReturnType<typeof createContentIgnore>
+): Promise<MinimalTreeNode[]> {
+    const markdownFiles = await getAllMarkdownFiles(sourceDir, sourceDir, contentIgnore)
     const nodes: MinimalTreeNode[] = []
 
     for (const [order, filePath] of markdownFiles.sort().entries()) {
@@ -585,7 +617,10 @@ function extractInternalPath(item: MdsiteFooterItem): string | null {
  * Title falls back to the raw entry / key when the markdown file is missing
  * or has no H1.
  */
-async function processFooterItems(items: MdsiteFooterItem[]): Promise<FooterLink[]> {
+async function processFooterItems(
+    items: MdsiteFooterItem[],
+    contentIgnore: ReturnType<typeof createContentIgnore>
+): Promise<FooterLink[]> {
     const links: FooterLink[] = []
 
     for (const item of items) {
@@ -601,7 +636,7 @@ async function processFooterItems(items: MdsiteFooterItem[]): Promise<FooterLink
 
         if (typeof item === 'string') {
             const normalizedPath = resolveFooterPath(item)
-            if (!normalizedPath) {
+            if (!normalizedPath || isIgnoredMarkdownPath(contentIgnore, normalizedPath)) {
                 continue
             }
             const title = await readH1Title(normalizedPath) ?? item
@@ -652,6 +687,9 @@ async function processFooterItems(items: MdsiteFooterItem[]): Promise<FooterLink
                 type: 'link',
                 isExternal: false
             })
+            continue
+        }
+        if (isIgnoredMarkdownPath(contentIgnore, normalizedPath)) {
             continue
         }
 
@@ -722,13 +760,14 @@ function filterTreeByExcludedPaths(nodes: MinimalTreeNode[], excluded: Set<strin
 /**
  * Generate footer links JSON file
  */
-export async function generateFooterJson() {
+export async function generateFooterJson(): Promise<void> {
     const domain = getContentDomain()
     console.log(`📎 Building footer links for: ${domain}`)
 
     const sourceDir = getSourceDir()
+    const contentIgnore = getConfiguredContentIgnore(sourceDir)
     const items = await loadFooterConfig(sourceDir)
-    const links = items ? await processFooterItems(items) : []
+    const links = items ? await processFooterItems(items, contentIgnore) : []
 
     const targetDir = getTargetDir()
     const outputPath = path.join(targetDir, '_footer.json')
@@ -746,16 +785,17 @@ export async function generateFooterJson() {
 /**
  * Generate navigation JSON file
  */
-export async function generateNavigationJson() {
+export async function generateNavigationJson(): Promise<void> {
     const domain = getContentDomain()
     console.log(`📋 Building navigation tree for: ${domain}`)
 
     const sourceDir = getSourceDir()
+    const contentIgnore = getConfiguredContentIgnore(sourceDir)
     let tree: MinimalTreeNode[] = []
     try {
         const menuItems = await loadMenuConfig(sourceDir)
         if (menuItems) {
-            const result = await processMenuItems(menuItems, '/')
+            const result = await processMenuItems(menuItems, '/', 0, contentIgnore)
             tree = result.nodes
         } else {
             console.warn('⚠️ No menu found in MDSITE_CONFIG_PATH, mdsite.yml, _menu.yml, or _menu.yaml (source: ' + sourceDir + ')')
@@ -771,7 +811,7 @@ export async function generateNavigationJson() {
     }
 
     if (tree.length === 0) {
-        tree = await buildFallbackNavigationTree(sourceDir)
+        tree = await buildFallbackNavigationTree(sourceDir, contentIgnore)
         if (excludedPaths.size > 0) {
             tree = filterTreeByExcludedPaths(tree, excludedPaths)
         }
@@ -861,7 +901,11 @@ function isExcludedSourceDir(name: string): boolean {
  * Get all markdown files recursively, skipping build/dependency directories
  * (see `isExcludedSourceDir`).
  */
-async function getAllMarkdownFiles(dir: string): Promise<string[]> {
+async function getAllMarkdownFiles(
+    dir: string,
+    sourceDir: string,
+    contentIgnore: ReturnType<typeof createContentIgnore>
+): Promise<string[]> {
     const files: string[] = []
 
     if (!await fs.pathExists(dir)) {
@@ -875,12 +919,17 @@ async function getAllMarkdownFiles(dir: string): Promise<string[]> {
         const stat = await fs.stat(itemPath)
 
         if (stat.isDirectory()) {
-            if (isExcludedSourceDir(item)) {
+            const relativeDir = path.relative(sourceDir, itemPath).replaceAll(path.sep, '/')
+            if (isExcludedSourceDir(item) || matches(contentIgnore, `${relativeDir}/`)) {
                 continue
             }
-            const subFiles = await getAllMarkdownFiles(itemPath)
+            const subFiles = await getAllMarkdownFiles(itemPath, sourceDir, contentIgnore)
             files.push(...subFiles)
-        } else if (item.endsWith('.md') && !item.endsWith('.draft.md')) {
+        } else if (
+            item.endsWith('.md')
+            && !item.endsWith('.draft.md')
+            && !matches(contentIgnore, path.relative(sourceDir, itemPath).replaceAll(path.sep, '/'))
+        ) {
             // Only include published markdown files
             files.push(itemPath)
         }
@@ -892,12 +941,13 @@ async function getAllMarkdownFiles(dir: string): Promise<string[]> {
 /**
  * Generate search index JSON file
  */
-export async function generateSearchIndexJson() {
+export async function generateSearchIndexJson(): Promise<void> {
     const domain = getContentDomain()
     console.log(`🔍 Building search index for: ${domain}`)
 
     const sourceDir = getSourceDir()
-    const markdownFiles = await getAllMarkdownFiles(sourceDir)
+    const contentIgnore = getConfiguredContentIgnore(sourceDir)
+    const markdownFiles = await getAllMarkdownFiles(sourceDir, sourceDir, contentIgnore)
 
     const index: SearchIndexEntry[] = []
 
@@ -943,7 +993,7 @@ export async function generateSearchIndexJson() {
 // MAIN EXECUTION
 // ----------------------------------------------------------------------------
 
-export async function buildContentData() {
+export async function buildContentData(): Promise<void> {
     await generateNavigationJson()
     await generateSearchIndexJson()
     await generateFooterJson()

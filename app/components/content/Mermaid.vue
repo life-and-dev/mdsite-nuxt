@@ -103,8 +103,8 @@ onUnmounted(() => {
 
 :deep(svg) {
   display: block;
-  width: 100%;
-  max-width: 100%;
+  width: auto;
+  max-width: none;
   height: auto;
   margin-inline: auto;
 }
@@ -122,6 +122,66 @@ onUnmounted(() => {
     box-shadow: none !important;
     margin: 1rem 0 !important;
     padding: 0 !important;
+  }
+
+  :deep(svg) {
+    background: white !important;
+  }
+
+  :deep(svg text),
+  :deep(svg tspan) {
+    fill: black !important;
+  }
+
+  :deep(svg .node rect),
+  :deep(svg .node circle),
+  :deep(svg .node ellipse),
+  :deep(svg .node polygon),
+  :deep(svg .node path),
+  :deep(svg .cluster rect),
+  :deep(svg .edgeLabel rect),
+  :deep(svg .stateGroup rect),
+  :deep(svg .stateGroup circle),
+  :deep(svg .statediagram-state rect),
+  :deep(svg .state-start circle),
+  :deep(svg .state-end circle),
+  :deep(svg .state-end path),
+  :deep(svg .state-note rect),
+  :deep(svg rect.actor),
+  :deep(svg .labelBox),
+  :deep(svg rect.note),
+  :deep(svg .activation0),
+  :deep(svg .activation1),
+  :deep(svg .activation2),
+  :deep(svg .classGroup rect),
+  :deep(svg rect.section),
+  :deep(svg rect.task),
+  :deep(svg rect[class^="task"]) {
+    fill: white !important;
+    stroke: black !important;
+  }
+
+  :deep(svg .flowchart-link),
+  :deep(svg .edgePath path),
+  :deep(svg .edge-thickness-normal),
+  :deep(svg .edge-thickness-thick),
+  :deep(svg .edge-pattern-solid),
+  :deep(svg .edge-pattern-dashed),
+  :deep(svg .edge-pattern-dotted),
+  :deep(svg .messageLine0),
+  :deep(svg .messageLine1),
+  :deep(svg .actor-line),
+  :deep(svg .loopLine),
+  :deep(svg .transition),
+  :deep(svg .classGroup line),
+  :deep(svg .relation),
+  :deep(svg .grid .tick line) {
+    stroke: black !important;
+  }
+
+  :deep(svg marker path) {
+    fill: black !important;
+    stroke: black !important;
   }
 }
 </style>

@@ -132,6 +132,7 @@ export function buildMermaidThemeVariables(colors: MdsiteThemeColors): MermaidTh
 export function initializeMermaid(mermaid: MermaidInitializer, colors: MdsiteThemeColors): void {
   mermaid.initialize({
     startOnLoad: false,
+    htmlLabels: false,
     theme: 'base',
     themeVariables: buildMermaidThemeVariables(colors),
     securityLevel: 'loose',

@@ -4,13 +4,14 @@
       <v-progress-circular indeterminate size="24"></v-progress-circular>
       <span>Rendering diagram...</span>
     </div>
-    <div v-html="svg" ref="container"></div>
+    <div v-html="svg" ref="container" class="mermaid-content"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useTheme } from 'vuetify'
+import { initializeMermaid, watchMermaidTheme } from '../../utils/mermaid-theme'
 
 const props = defineProps({
   code: {
@@ -23,46 +24,31 @@ const svg = ref('')
 const container = ref<HTMLElement | null>(null)
 
 const theme = useTheme()
-
-// Build mermaid themeVariables from the active Vuetify theme's hex colors.
-// Vuetify exposes colors reactively via theme.current.value.colors; this
-// re-runs on every render so toggling light/dark picks up the new palette.
-const buildMermaidThemeVariables = () => {
-  const colors = theme.current.value.colors
-  return {
-    primaryColor: colors.primary,
-    primaryTextColor: colors['on-primary'],
-    primaryBorderColor: colors.primary,
-    lineColor: colors['on-surface'],
-    textColor: colors['on-surface'],
-    secondaryColor: colors.secondary,
-    tertiaryColor: colors.surface
-  }
-}
+let isMounted = false
+let latestRender = 0
 
 const renderDiagram = async () => {
   if (process.server) return
 
+  const renderNumber = ++latestRender
+
   try {
     const mermaid = (await import('mermaid')).default
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'base',
-      themeVariables: buildMermaidThemeVariables(),
-      securityLevel: 'loose',
-      fontFamily: 'Noto Sans, sans-serif'
-    })
+    initializeMermaid(mermaid, theme.current.value.colors)
 
     const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`
     const { svg: renderedSvg } = await mermaid.render(id, props.code)
+    if (!isMounted || renderNumber !== latestRender) return
     svg.value = renderedSvg
   } catch (error) {
+    if (!isMounted || renderNumber !== latestRender) return
     console.error('Mermaid rendering failed:', error)
     svg.value = `<div class="error">Failed to render diagram: ${error}</div>`
   }
 }
 
 onMounted(() => {
+  isMounted = true
   renderDiagram()
 })
 
@@ -70,12 +56,13 @@ watch(() => props.code, () => {
   renderDiagram()
 })
 
-// Re-render when the active Vuetify theme definition changes (light <-> dark
-// toggle or programmatic theme swap). `deep: true` because the colors object
-// is replaced wholesale on theme change.
-watch(() => theme.current.value, () => {
-  renderDiagram()
-}, { deep: true })
+const stopWatchingTheme = watchMermaidTheme(() => theme.current.value, renderDiagram)
+
+onUnmounted(() => {
+  stopWatchingTheme()
+  isMounted = false
+  latestRender++
+})
 </script>
 
 <style scoped>
@@ -99,7 +86,17 @@ watch(() => theme.current.value, () => {
   font-style: italic;
 }
 
+.mermaid-content {
+  width: 100%;
+  min-width: 0;
+}
+
+.mermaid-content:empty {
+  display: none;
+}
+
 :deep(svg) {
+  width: 100%;
   max-width: 100%;
   height: auto;
 }

@@ -109,6 +109,18 @@ onUnmounted(() => {
   margin-inline: auto;
 }
 
+:deep(svg .edgeLabel text),
+:deep(svg .edgeLabel tspan) {
+  paint-order: stroke fill;
+  stroke: rgba(var(--v-theme-surface), 0.75);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+
+:deep(svg .edgeLabel rect) {
+  visibility: hidden;
+}
+
 .error {
   color: var(--v-theme-error);
   padding: 1rem;
@@ -131,6 +143,11 @@ onUnmounted(() => {
   :deep(svg text),
   :deep(svg tspan) {
     fill: black !important;
+  }
+
+  :deep(svg .edgeLabel text),
+  :deep(svg .edgeLabel tspan) {
+    stroke: #fff;
   }
 
   :deep(svg .node rect),

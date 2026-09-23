@@ -65,13 +65,15 @@ describe('Mermaid theme', () => {
       primaryTextColor: lightColors['on-primary'],
       nodeBorder: lightColors.outline,
       nodeTextColor: lightColors['on-surface'],
-      lineColor: lightColors.outline,
+      lineColor: lightColors.secondary,
+      defaultLinkColor: lightColors.secondary,
       clusterBkg: lightColors.background,
       noteBkgColor: lightColors.selected,
       noteTextColor: lightColors['on-selected'],
       edgeLabelBackground: lightColors.background,
       actorBkg: lightColors.surface,
       actorTextColor: lightColors['on-surface'],
+      actorLineColor: lightColors.secondary,
       doneTaskBkgColor: lightColors.success,
       critBkgColor: lightColors.error,
       todayLineColor: lightColors.warning,
@@ -85,6 +87,9 @@ describe('Mermaid theme', () => {
     const darkVariables = buildMermaidThemeVariables(darkColors)
 
     expect(darkVariables.primaryColor).toBe(darkColors.primary)
+    expect(darkVariables.lineColor).toBe(darkColors.secondary)
+    expect(darkVariables.defaultLinkColor).toBe(darkColors.secondary)
+    expect(darkVariables.actorLineColor).toBe(darkColors.secondary)
     expect(darkVariables.noteTextColor).toBe(darkColors['on-selected'])
     expect(darkVariables).not.toEqual(lightVariables)
   })

@@ -167,11 +167,11 @@
 }
 
 .content-body .markdown-alert-important {
-  border-color: rgb(var(--v-theme-primary));
-  background-color: rgba(var(--v-theme-primary), 0.05);
+  border-color: rgb(var(--v-theme-important));
+  background-color: rgba(var(--v-theme-important), 0.05);
 }
 .content-body .markdown-alert-important .markdown-alert-title {
-  color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-important));
 }
 
 .content-body .markdown-alert-warning {

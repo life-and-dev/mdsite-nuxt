@@ -46,3 +46,6 @@ public/**/*.yml
 .mdsite/*
 .output/
 # end mdsite
+
+# Opencode
+.opencode/autocode/memories/*

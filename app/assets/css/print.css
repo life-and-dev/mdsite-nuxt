@@ -54,6 +54,21 @@
     color: black !important;
   }
 
+  /* Keep table grids visible without printed backgrounds */
+  .prose-table-wrapper table {
+    border-collapse: collapse !important;
+  }
+
+  .prose-table-wrapper table,
+  .prose-table-wrapper th,
+  .prose-table-wrapper td {
+    border: 1px solid black !important;
+  }
+
+  .prose-table-wrapper th {
+    font-weight: bold !important;
+  }
+
   /* Render links as plain text */
   a {
     color: black !important;

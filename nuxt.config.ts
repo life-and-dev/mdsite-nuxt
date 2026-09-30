@@ -111,6 +111,7 @@ export default defineNuxtConfig({
   ssr: ssrEnabled,
 
   css: [
+    'katex/dist/katex.min.css',
     '~/assets/css/markdown.css',
     '~/assets/css/print.css',
     '~/assets/css/bible-tooltips.css'
@@ -121,7 +122,18 @@ export default defineNuxtConfig({
     '@nuxt/content'
   ],
 
-  content: {},
+  content: {
+    build: {
+      markdown: {
+        remarkPlugins: {
+          'remark-math': { options: { singleDollarTextMath: true } }
+        },
+        rehypePlugins: {
+          'rehype-katex': {}
+        }
+      }
+    }
+  },
 
   vite: {
     optimizeDeps: {

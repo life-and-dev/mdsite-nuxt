@@ -384,6 +384,11 @@ body {
   overflow-y: auto;
 }
 
+.drawer-content > .v-expansion-panels {
+  max-height: 50%;
+  overflow-y: auto;
+}
+
 .toc-panel-title {
   font-weight: 600;
   font-size: 0.875rem;

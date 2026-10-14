@@ -5,6 +5,32 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { buildContentData, generateNavigationJson, generateSearchIndexJson, generateFooterJson } from './generate-indices.js'
+import type { MinimalTreeNode } from './generate-indices.js'
+
+type NavigationProjection = Omit<MinimalTreeNode, 'id' | 'description' | 'children'> & {
+  children?: NavigationProjection[]
+}
+
+function flattenNavigation(nodes: MinimalTreeNode[]): MinimalTreeNode[] {
+  return nodes.flatMap(node => [node, ...flattenNavigation(node.children ?? [])])
+}
+
+function projectNavigation(nodes: MinimalTreeNode[]): NavigationProjection[] {
+  return nodes.map(node => ({
+    path: node.path,
+    title: node.title,
+    type: node.type,
+    isPrimary: node.isPrimary,
+    ...(node.children ? { children: projectNavigation(node.children) } : {}),
+  }))
+}
+
+function assertNavigationIds(nodes: MinimalTreeNode[]): string[] {
+  const ids = flattenNavigation(nodes).map(node => node.id)
+  expect(ids.every(id => typeof id === 'string' && id.length > 0)).toBe(true)
+  expect(new Set(ids).size).toBe(ids.length)
+  return ids
+}
 
 describe('generated content indices', () => {
   const originalEnv = { ...process.env }
@@ -33,11 +59,40 @@ describe('generated content indices', () => {
 
     await generateNavigationJson()
 
-    const navigation = JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
+    const navigation: MinimalTreeNode[] = JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
     expect(navigation).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: '/', title: 'Home' }),
       expect.objectContaining({ path: '/guide', title: 'Guide' }),
     ]))
+    const ids = assertNavigationIds(navigation)
+    expect(ids).toHaveLength(2)
+
+    await generateNavigationJson()
+
+    const repeatedNavigation: MinimalTreeNode[] = JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
+    expect(assertNavigationIds(repeatedNavigation)).toEqual(ids)
+  })
+
+  it('falls back to markdown files with stable unique IDs when menu is explicitly empty', async (): Promise<void> => {
+    await fs.writeFile(path.join(contentDir, 'index.md'), '# Home\n', 'utf8')
+    const mdsitePath = path.join(tempDir, 'mdsite.yml')
+    await fs.writeFile(mdsitePath, 'menu: []\n', 'utf8')
+    process.env.MDSITE_CONFIG_PATH = mdsitePath
+
+    await generateNavigationJson()
+
+    const navigation: MinimalTreeNode[] = JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
+    const expectedNavigation: NavigationProjection[] = [
+      { path: '/', title: 'Home', type: 'link', isPrimary: true },
+    ]
+    expect(projectNavigation(navigation)).toEqual(expectedNavigation)
+    const ids = assertNavigationIds(navigation)
+
+    await generateNavigationJson()
+
+    const repeatedNavigation: MinimalTreeNode[] = JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
+    expect(projectNavigation(repeatedNavigation)).toEqual(expectedNavigation)
+    expect(assertNavigationIds(repeatedNavigation)).toEqual(ids)
   })
 
   it('writes searchable markdown pages with excerpts', async () => {
@@ -161,6 +216,240 @@ describe('generated content indices', () => {
       const navigation = await readNavigation()
       const alias = navigation.find((n: { title: string, path: string }) => n.title === 'Homepage')
       expect(alias).toEqual(expect.objectContaining({ path: '/', title: 'Homepage' }))
+    })
+  })
+
+  describe('navigation ID regression', () => {
+    const expectedNavigation: NavigationProjection[] = ['a', 'b'].map(section => ({
+      path: `/section-${section}`,
+      title: `section-${section}`,
+      type: 'link',
+      isPrimary: true,
+      children: [{
+        path: `/section-${section}/guide`,
+        title: 'guide',
+        type: 'link',
+        isPrimary: true,
+        children: [
+          {
+            path: `/section-${section}/guide`,
+            title: `Guide ${section.toUpperCase()}`,
+            type: 'link',
+            isPrimary: true,
+          },
+          {
+            path: `/section-${section}/guide/child-${section}`,
+            title: `Child ${section.toUpperCase()}`,
+            type: 'link',
+            isPrimary: true,
+          },
+          {
+            path: `/section-${section}/guide/child-${section}`,
+            title: `Child ${section.toUpperCase()}`,
+            type: 'link',
+            isPrimary: true,
+          },
+          {
+            path: `/section-${section}/guide/child-${section}`,
+            title: `Alias ${section.toUpperCase()}`,
+            type: 'link',
+            isPrimary: false,
+          },
+        ],
+      }],
+    }))
+
+    async function writeNestedMenuFixture(): Promise<void> {
+      delete process.env.MDSITE_CONFIG_PATH
+      for (const section of ['a', 'b']) {
+        const sectionDir = path.join(contentDir, `section-${section}`)
+        const guideDir = path.join(sectionDir, 'guide')
+        await fs.mkdir(guideDir, { recursive: true })
+        await fs.writeFile(path.join(sectionDir, 'index.md'), `# Section ${section.toUpperCase()}\n\nOverview.`, 'utf8')
+        await fs.writeFile(path.join(guideDir, 'index.md'), `# Guide ${section.toUpperCase()}\n\nGuide overview.`, 'utf8')
+        await fs.writeFile(path.join(guideDir, `child-${section}.md`), `# Child ${section.toUpperCase()}\n\nChild content.`, 'utf8')
+      }
+      await fs.writeFile(path.join(contentDir, '_menu.yml'), [
+        '- section-a:',
+        '    - guide:',
+        '        - index',
+        '        - child-a',
+        '        - child-a',
+        '        - Alias A: child-a',
+        '- section-b:',
+        '    - guide:',
+        '        - index',
+        '        - child-b',
+        '        - child-b',
+        '        - Alias B: child-b',
+        '',
+      ].join('\n'), 'utf8')
+    }
+
+    async function readNavigation(): Promise<MinimalTreeNode[]> {
+      return JSON.parse(await fs.readFile(path.join(publicDir, '_navigation.json'), 'utf8'))
+    }
+
+    it('assigns globally unique IDs across nested groups, repeated routes, and aliases', async () => {
+      await writeNestedMenuFixture()
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      expect(projectNavigation(navigation)).toEqual(expectedNavigation)
+      const nodes = flattenNavigation(navigation)
+      expect(nodes).toHaveLength(12)
+      for (const section of ['a', 'b']) {
+        expect(nodes.filter(node => node.path === `/section-${section}/guide`)).toHaveLength(2)
+        expect(nodes.filter(node => node.path === `/section-${section}/guide/child-${section}`)).toHaveLength(3)
+      }
+      expect(nodes.some(node => node.path.endsWith('/index'))).toBe(false)
+
+      const ids = nodes.map(node => node.id)
+      expect(ids.every(id => typeof id === 'string' && id.length > 0)).toBe(true)
+      const duplicateIds = new Set(ids.filter((id, index) => ids.indexOf(id) !== index))
+      const duplicates = nodes
+        .filter(node => duplicateIds.has(node.id))
+        .map(node => ({ id: node.id, path: node.path, title: node.title }))
+      expect(new Set(ids).size, `Duplicate navigation IDs: ${JSON.stringify(duplicates)}`).toBe(nodes.length)
+    })
+
+    it('keeps the full DFS ID sequence deterministic across repeated generation', async () => {
+      await writeNestedMenuFixture()
+
+      await generateNavigationJson()
+      const firstNavigation = await readNavigation()
+      expect(projectNavigation(firstNavigation)).toEqual(expectedNavigation)
+      const firstIds = flattenNavigation(firstNavigation).map(node => node.id)
+      expect(firstIds).toHaveLength(12)
+      expect(firstIds.every(id => typeof id === 'string' && id.length > 0)).toBe(true)
+
+      await generateNavigationJson()
+      const secondNavigation = await readNavigation()
+      expect(projectNavigation(secondNavigation)).toEqual(expectedNavigation)
+      const secondIds = flattenNavigation(secondNavigation).map(node => node.id)
+      expect(secondIds).toEqual(firstIds)
+    })
+
+    it('keeps every mixed-branch navigation ID unique, nonempty, and deterministic through deep submenus', async (): Promise<void> => {
+      const pages: [string, string][] = [
+        ['index.md', 'Home'],
+        ['guide.md', 'Guide'],
+        ['guide/index.md', 'Guide Landing'],
+        ['guide/topic.md', 'Topic'],
+        ['guide/topic/deep.md', 'Deep'],
+        ['guide/topic/deep/index.md', 'Deep Landing'],
+        ['guide/topic/deep/page.md', 'Deep Page'],
+        ['other.md', 'Other'],
+        ['other/page.md', 'Other Page'],
+      ]
+      for (const [relativePath, title] of pages) {
+        const filePath = path.join(contentDir, relativePath)
+        await fs.mkdir(path.dirname(filePath), { recursive: true })
+        await fs.writeFile(filePath, `# ${title}\n\nContent.`, 'utf8')
+      }
+      const mdsitePath = path.join(tempDir, 'mdsite.yml')
+      await fs.writeFile(mdsitePath, [
+        'menu:',
+        '  - index',
+        '  - "==="',
+        '  - null',
+        '  - "Group /::": null',
+        '  - "Group /::": ""',
+        '  - "Group /::": "==="',
+        '  - "Docs /::": https://example.com',
+        '  - "Docs /::": http://example.com',
+        '  - "Home /::": index',
+        '  - guide:',
+        '      - index',
+        '      - "Home /::": index',
+        '      - topic:',
+        '          - "==="',
+        '          - null',
+        '          - "Group /::": null',
+        '          - "Docs /::": https://example.com',
+        '          - deep:',
+        '              - index',
+        '              - page',
+        '              - page',
+        '              - "Page /::": page',
+        '              - "Page /::": /other/page',
+        '              - "Home /::": index',
+        '              - null',
+        '              - "Group /::": ""',
+        '              - "Docs /::": https://example.com',
+        '  - other:',
+        '      - page',
+        '      - "Page /::": /guide/topic/deep/page',
+        '  - guide/topic/deep/page',
+        '  - "Page /::": guide/topic/deep/page',
+        '',
+      ].join('\n'), 'utf8')
+      process.env.MDSITE_CONFIG_PATH = mdsitePath
+
+      const expectedMixedNavigation: NavigationProjection[] = [
+        { path: '/', title: 'Home', type: 'link', isPrimary: true },
+        { path: '//__separator-1', title: '---', type: 'separator' },
+        { path: '//__separator-2', title: '---', type: 'separator' },
+        { path: '//__header-3', title: 'Group /::', type: 'header' },
+        { path: '//__header-4', title: 'Group /::', type: 'header' },
+        { path: '//__header-5', title: 'Group /::', type: 'header' },
+        { path: 'https://example.com', title: 'Docs /::', type: 'external' },
+        { path: 'http://example.com', title: 'Docs /::', type: 'external' },
+        { path: '/', title: 'Home /::', type: 'link', isPrimary: false },
+        {
+          path: '/guide', title: 'Guide', type: 'link', isPrimary: true,
+          children: [
+            { path: '/guide', title: 'Guide Landing', type: 'link', isPrimary: true },
+            { path: '/guide', title: 'Home /::', type: 'link', isPrimary: false },
+            {
+              path: '/guide/topic', title: 'Topic', type: 'link', isPrimary: true,
+              children: [
+                { path: '/guide/topic/__separator-0', title: '---', type: 'separator' },
+                { path: '/guide/topic/__separator-1', title: '---', type: 'separator' },
+                { path: '/guide/topic/__header-2', title: 'Group /::', type: 'header' },
+                { path: 'https://example.com', title: 'Docs /::', type: 'external' },
+                {
+                  path: '/guide/topic/deep', title: 'Deep', type: 'link', isPrimary: true,
+                  children: [
+                    { path: '/guide/topic/deep', title: 'Deep Landing', type: 'link', isPrimary: true },
+                    { path: '/guide/topic/deep/page', title: 'Deep Page', type: 'link', isPrimary: true },
+                    { path: '/guide/topic/deep/page', title: 'Deep Page', type: 'link', isPrimary: true },
+                    { path: '/guide/topic/deep/page', title: 'Page /::', type: 'link', isPrimary: false },
+                    { path: '/other/page', title: 'Page /::', type: 'link', isPrimary: false },
+                    { path: '/guide/topic/deep', title: 'Home /::', type: 'link', isPrimary: false },
+                    { path: '/guide/topic/deep/__separator-6', title: '---', type: 'separator' },
+                    { path: '/guide/topic/deep/__header-7', title: 'Group /::', type: 'header' },
+                    { path: 'https://example.com', title: 'Docs /::', type: 'external' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          path: '/other', title: 'Other', type: 'link', isPrimary: true,
+          children: [
+            { path: '/other/page', title: 'Other Page', type: 'link', isPrimary: true },
+            { path: '/guide/topic/deep/page', title: 'Page /::', type: 'link', isPrimary: false },
+          ],
+        },
+        { path: '/guide/topic/deep/page', title: 'Deep Page', type: 'link', isPrimary: true },
+        { path: '/guide/topic/deep/page', title: 'Page /::', type: 'link', isPrimary: false },
+      ]
+
+      await generateNavigationJson()
+
+      const navigation = await readNavigation()
+      expect(projectNavigation(navigation)).toEqual(expectedMixedNavigation)
+      const ids = assertNavigationIds(navigation)
+      expect(ids).toHaveLength(32)
+
+      await generateNavigationJson()
+
+      const repeatedNavigation = await readNavigation()
+      expect(projectNavigation(repeatedNavigation)).toEqual(expectedMixedNavigation)
+      expect(assertNavigationIds(repeatedNavigation)).toEqual(ids)
     })
   })
 

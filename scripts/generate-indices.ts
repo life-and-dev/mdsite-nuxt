@@ -363,6 +363,15 @@ async function processMenuItems(
     return { nodes, nextOrder: order }
 }
 
+function assignNavigationIds(nodes: MinimalTreeNode[], parentId: string): void {
+    for (const [position, node] of nodes.entries()) {
+        node.id = `${parentId}/${position}`
+        if (node.children) {
+            assignNavigationIds(node.children, node.id)
+        }
+    }
+}
+
 /**
  * Count total nodes in tree
  */
@@ -816,6 +825,8 @@ export async function generateNavigationJson(): Promise<void> {
             tree = filterTreeByExcludedPaths(tree, excludedPaths)
         }
     }
+
+    assignNavigationIds(tree, 'menu')
 
     const targetDir = getTargetDir()
     const outputPath = path.join(targetDir, '_navigation.json')

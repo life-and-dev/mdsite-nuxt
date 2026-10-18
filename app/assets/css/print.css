@@ -33,7 +33,7 @@
   body {
     color: black !important;
     background: white !important;
-    font-size: 10pt;
+    font-size: 9pt !important;
     line-height: 1.5;
   }
 
@@ -99,6 +99,34 @@
     page-break-inside: avoid;
   }
 
+  h1 {
+    font-size: 15pt !important;
+  }
+
+  h2 {
+    font-size: 14pt !important;
+  }
+
+  h3 {
+    font-size: 13pt !important;
+  }
+
+  h3 {
+    font-size: 12pt !important;
+  }
+
+  h4 {
+    font-size: 11pt !important;
+  }
+
+  h5 {
+    font-size: 10pt !important;
+  }
+
+  h6 {
+    font-size: 9pt !important;
+  }
+
   /* Blockquotes and cards */
   blockquote,
   .v-card {
@@ -122,7 +150,7 @@
 
   /* Nested blockquote text slightly smaller */
   .content-body .blockquote-content .blockquote-content {
-    font-size: 11pt !important;
+    font-size: 9pt !important;
   }
 
   /* Hide interactive elements that don't make sense in print */

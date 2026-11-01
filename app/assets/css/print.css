@@ -148,8 +148,8 @@
     padding: 0 !important;
   }
 
-  /* Nested blockquote text slightly smaller */
-  .content-body .blockquote-content .blockquote-content {
+  /* Use the same print size for all blockquote levels. */
+  .content-body .blockquote-content {
     font-size: 9pt !important;
   }
 

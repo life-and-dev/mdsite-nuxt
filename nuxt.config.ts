@@ -4,6 +4,7 @@ import { buildDarkOverrideCss, getDomainThemes } from './app/config/themes'
 import { isInExcludedContext, wrapBibleReferences } from './app/utils/bible-wrap'
 import { runBuildFallbackHooks } from './scripts/renderer-hooks'
 import { withBasePath } from './utils/base-url'
+import { resolveContentImages } from './utils/markdown-images'
 import { loadMdsiteConfigSync } from './utils/mdsite-config'
 
 const mdsite = loadMdsiteConfigSync()
@@ -125,6 +126,8 @@ export default defineNuxtConfig({
   content: {
     build: {
       markdown: {
+        // Nuxt Content's parsed-file cache must vary with the image transformation and base URL.
+        ...{ markdownImageCacheKey: `1:${appBaseURL}` },
         remarkPlugins: {
           'remark-math': { options: { singleDollarTextMath: true } }
         },
@@ -213,6 +216,13 @@ export default defineNuxtConfig({
       console.log('📖 Processing Bible verses in:', file.id)
 
       file.body = wrapBibleReferences(file.body)
+    },
+
+    'content:file:afterParse': ({ file, content }) => {
+      if (!file.id.endsWith('.md')) return
+      // Rewrite while the source ID is available so generated HTML does not depend on browser-relative paths.
+      resolveContentImages(content.body, file.id, appBaseURL)
+      resolveContentImages(content.excerpt, file.id, appBaseURL)
     },
 
     'build:before': async () => {

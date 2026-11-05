@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 interface NuxtConfigSubset {
+  content?: { build?: { markdown?: { markdownImageCacheKey?: string } } }
+  hooks?: {
+    'content:file:afterParse'?: (ctx: { file: { id: string }, content: { body: unknown } }) => void
+  }
   vite?: {
     optimizeDeps?: {
       include?: string[]
@@ -51,6 +55,7 @@ describe('Nuxt config', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   it('pre-bundles dependencies discovered through dynamic client imports', async () => {
@@ -62,5 +67,15 @@ describe('Nuxt config', () => {
       '@vue/devtools-kit',
       'mermaid',
     ])
+  })
+
+  it('rewrites parsed Markdown images even when Bible tooltips are disabled', async () => {
+    vi.stubEnv('NUXT_APP_BASE_URL', '/site/')
+    await import('../nuxt.config')
+    const config = defineNuxtConfigMock.mock.calls[0]?.[0]
+    const body = { type: 'minimark', value: [['p', {}, ['img', { src: 'creator.manuscript.webp' }]]] }
+    config?.hooks?.['content:file:afterParse']?.({ file: { id: 'content/divine/creator.md' }, content: { body } })
+    expect(body.value[0]?.[2]).toEqual(['img', { src: '/site/divine/creator.manuscript.webp' }])
+    expect(config?.content?.build?.markdown?.markdownImageCacheKey).toBe('1:/site/')
   })
 })

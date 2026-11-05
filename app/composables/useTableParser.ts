@@ -24,10 +24,21 @@ function parseHeaders(tableElement: HTMLTableElement): TableHeader[] {
 
   const headers: TableHeader[] = []
   const thElements = headerRow.querySelectorAll('th')
+  const titles = Array.from(thElements, (th, index) => th.textContent?.trim() || `Column ${index + 1}`)
+  const baseKeys = titles.map((title, index) => toKebabCase(title) || `col-${index}`)
+  const reservedKeys = new Set(baseKeys)
+  const usedKeys = new Set<string>()
 
-  thElements.forEach((th, index) => {
-    const title = th.textContent?.trim() || `Column ${index + 1}`
-    const key = toKebabCase(title) || `col-${index}`
+  titles.forEach((title, index) => {
+    const baseKey = baseKeys[index]!
+    let key = baseKey
+    let suffix = 2
+    if (usedKeys.has(key)) {
+      do {
+        key = `${baseKey}-${suffix++}`
+      } while (usedKeys.has(key) || reservedKeys.has(key))
+    }
+    usedKeys.add(key)
 
     headers.push({
       title,
